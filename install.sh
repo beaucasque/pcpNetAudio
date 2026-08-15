@@ -15,6 +15,8 @@
 #   CARD         nom carte ALSA, auto-détecté si vide
 #   NODE_NAME    nom du client snapcast                 (défaut: hostname)
 #   CLOSEOUT     secondes avant libération ALSA         (défaut: 5)
+#   ALSA_BUFFER  tampon ALSA du lecteur, en ms          (défaut: 40, min 10)
+#   ALSA_FRAGS   nombre de fragments ALSA               (défaut: 4, min 2)
 #   PCPNA_DIR    répertoire d'installation              (défaut: /mnt/mmcblk0p2/pcpNetAudio)
 #
 # Mode hw   : bit-perfect. squeezelite et snapclient s'excluent mutuellement.
@@ -32,6 +34,18 @@ RATE="${RATE:-48000}"
 CARD="${CARD:-}"
 NODE_NAME="${NODE_NAME:-$(hostname)}"
 CLOSEOUT="${CLOSEOUT:-5}"
+# Tampon ALSA du lecteur. Avec chunk_ms cote serveur, il forme le plancher
+# INCOMPRESSIBLE sous lequel "buffer" ne peut pas descendre.
+#
+# Mesure sur ce parc :
+#   ALSA 80 / chunk 20  ->  plancher ~150 ms  (defaut amont)
+#   ALSA 40 / chunk 10  ->  plancher ~100 ms  <- retenu
+#   ALSA 20 / 2 frags   ->  PIRE : plus assez de profondeur pour absorber la
+#                           gigue d'ordonnancement, ca decroche des 80 ms
+#
+# Descendre n'est donc pas monotone : sous 40 ms le tampon cesse d'amortir.
+ALSA_BUFFER="${ALSA_BUFFER:-40}"
+ALSA_FRAGS="${ALSA_FRAGS:-4}"
 
 BIN_DIR="$PCPNA_DIR/bin"
 LOG="/tmp/snapclient.log"
@@ -258,6 +272,7 @@ exec "$BIN_DIR/snapclient" \\
     "tcp://$SNAPSERVER:1704" \\
     --hostID "$NODE_NAME" \\
     --soundcard "$SND_DEVICE" \\
+    --player "alsa:buffer_time=$ALSA_BUFFER,fragments=$ALSA_FRAGS" \\
     --mixer none \\
     >> "$LOG" 2>&1
 EOF
@@ -332,6 +347,7 @@ cat <<EOF
   sortie     $SND_DEVICE
   mode       $ALSA_MODE
   volume     none (bit-perfect)
+  tampon     ALSA ${ALSA_BUFFER}ms / $ALSA_FRAGS fragments
   logs       $LOG
 
 EOF

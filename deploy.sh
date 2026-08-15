@@ -48,7 +48,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     if [ -n "$DRY_RUN" ]; then
         echo "    [dry-run] scp $INSTALLER $SSH_USER@$IP:/tmp/"
-        echo "    [dry-run] SNAPSERVER=$SNAPSERVER ALSA_MODE=$MODE ATTEN=$ATTEN CARD=$CARD NODE_NAME=$NAME sh /tmp/install.sh"
+        echo "    [dry-run] SNAPSERVER=$SNAPSERVER ALSA_MODE=$MODE ATTEN=$ATTEN CARD=$CARD NODE_NAME=$NAME ALSA_BUFFER=$ALSA_BUFFER ALSA_FRAGS=$ALSA_FRAGS sh /tmp/install.sh"
         continue
     fi
 
@@ -63,7 +63,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     if scp -q "$INSTALLER" "$SSH_USER@$IP:/tmp/install.sh" \
        && ssh -n "$SSH_USER@$IP" \
-            "SNAPSERVER='$SNAPSERVER' ALSA_MODE='$MODE' ATTEN='$ATTEN' CARD='$CARD' NODE_NAME='$NAME' sh /tmp/install.sh"
+            "SNAPSERVER='$SNAPSERVER' ALSA_MODE='$MODE' ATTEN='$ATTEN' CARD='$CARD' NODE_NAME='$NAME' ALSA_BUFFER='$ALSA_BUFFER' ALSA_FRAGS='$ALSA_FRAGS' sh /tmp/install.sh"
     then
         OK_COUNT=$((OK_COUNT + 1))
     else

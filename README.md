@@ -141,11 +141,26 @@ faut la relancer depuis Lyrion.
 programme la lecture à *(instant de capture + buffer)*. Ce n'est pas un tampon
 réseau.
 
-Réglé à **150 ms**, mesuré par paliers sur les 4 nœuds. Le point de rupture est
-entre 125 et 100 ms : à 100 ms les décrochages sont massifs, à 125 ms c'est propre
-mais la marge est de 25 ms seulement. 150 ms tient sans une anomalie sur 90 s et
-laisse 50 % de marge — de quoi encaisser un pic de charge sans couper une zone en
-plein set.
+Réglé à **100 ms**, contre 1000 par défaut. Mais `buffer` ne se règle pas seul : il
+ne peut pas descendre sous la somme des étages fixes de la chaîne, à savoir le
+tampon ALSA du lecteur et `chunk_ms` côté serveur.
+
+| ALSA / chunk | Plancher atteint |
+|---|---|
+| 80 ms / 20 ms (défauts amont) | ~150 ms |
+| **40 ms / 10 ms** | **~100 ms — retenu** |
+| 20 ms / 2 fragments | **pire** : décroche dès 80 ms |
+
+Descendre n'est **pas monotone**. Sous 40 ms, le tampon ALSA n'a plus assez de
+profondeur pour absorber la gigue d'ordonnancement et se met à sous-alimenter la
+carte : à 80 ms de buffer, on passe de 2-3 anomalies à plusieurs centaines. Le
+réglage final tient 120 s sans une seule anomalie sur les 4 nœuds.
+
+**Le facteur limitant n'est pas le nœud le plus faible.** Sur ce parc, le Pi Zero W
+en ARMv6 mono-cœur est systématiquement le **plus robuste** des quatre : à 60 ms il
+journalise 57 anomalies contre ~1370 pour les Zero 2 W, et sa charge ne bouge pas
+quand on quadruple la fréquence de réveil. Le plancher est paramétrique, pas
+matériel.
 
 **La profondeur de bits n'a aucun effet sur la latence** : un chunk de 20 ms dure
 20 ms qu'il soit en 16 ou 24 bits. Et le 16 bits n'est pas non plus un compromis de
