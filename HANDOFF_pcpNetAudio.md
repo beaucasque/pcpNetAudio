@@ -404,11 +404,29 @@ c'est l'argument pour l'extraction de `.deb` plutôt que la compilation.
   Testable dès l'Étape D.
 - **Pourquoi les Zero 2 W décrochent-ils avant le Zero W ?** `pcpKitchen` et
   `pcpLobby` sont matériellement identiques (`rev 902120`) et lâchent au même seuil,
-  à trente anomalies près — mais **plus tôt que `pcpBunker`**, qui est pourtant un
-  Zero W mono-cœur ARMv6, plus ancien et plus faible. Ce sont eux qui fixent le
-  plancher de latence du parc. Pistes non explorées : modèle d'adaptateur Ethernet
-  USB, interruptions du Wi-Fi/BT embarqué, throttling thermique. À creuser si l'on
-  veut descendre sous 80 ms.
+  à trente anomalies près — mais **plus tôt que `pcpBunker`**, pourtant un Zero W
+  mono-cœur ARMv6, plus ancien et plus faible. Ce sont eux qui fixent le plancher
+  du parc.
+
+  **Deux pistes déjà éliminées, ne pas les rouvrir :**
+
+  - *Adaptateur Ethernet USB* — c'est le **même modèle** sur les trois Zero.
+  - *Fréquence CPU / governor* — les Zero 2 W tournaient à 700-800 MHz sous
+    `ondemand` contre 1000 pour le Zero W, hypothèse séduisante : sur un mono-cœur
+    la charge de snapclient est visible et le governor maintient le maximum, tandis
+    que diluée sur quatre cœurs elle passe inaperçue. **Testé : faux.** En
+    `performance`, les quatre cœurs montent bien à 1000 MHz (et pcpDJ à 1400), et le
+    plancher ne bouge pas d'un millimètre — 70 ms reste marginal, 60 ms rompt. Le
+    governor a été remis à `ondemand` : inutile de consommer et chauffer pour rien.
+
+  Restent : interruptions du Wi-Fi/BT embarqué, comportement du pilote USB, ou la
+  migration du fil audio entre cœurs sur un quad-cœur — un mono-cœur sérialise tout
+  et n'a ni migration ni rebond de cache. Cette dernière piste est cohérente avec
+  l'observation, mais **non vérifiée**.
+
+  À relativiser : la somme des étages fixes (ALSA 40 + chunk 10) vaut 50 ms, et la
+  rupture est à 60. On est donc à ~10-20 ms du plancher théorique de l'architecture.
+  Il reste peu à gagner, quelle qu'en soit la cause.
 
 ---
 

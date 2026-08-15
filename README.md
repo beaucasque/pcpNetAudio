@@ -195,6 +195,12 @@ Chaque palier a demandé de s'attaquer à un étage différent : d'abord `buffer
 les tampons fixes, puis la suppression du FIFO. Régler `buffer` seul plafonnait
 à 150 ms.
 
+**On est près du plancher de l'architecture.** La somme des étages fixes vaut 50 ms
+(ALSA 40 + chunk 10) et la rupture est à 60 : il reste peu à gagner. Deux pistes ont
+été testées et écartées — réduire le tampon ALSA sous 40 ms **dégrade**, et forcer le
+governor CPU en `performance` ne déplace pas le plancher d'un millimètre, malgré des
+cœurs qui passent de 700-800 à 1000 MHz.
+
 Descendre n'est **pas monotone**. Sous 40 ms, le tampon ALSA n'a plus assez de
 profondeur pour absorber la gigue d'ordonnancement et se met à sous-alimenter la
 carte : à 80 ms de buffer, on passe de 2-3 anomalies à plusieurs centaines. Le
