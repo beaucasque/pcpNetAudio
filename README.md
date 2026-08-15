@@ -131,9 +131,28 @@ Deux fonctions, délibérément :
   bascule délègue à `fleet.sh`, aucune logique n'est dupliquée.
 - **volume par snapclient**, qui est le réglage réellement utilisé au quotidien.
 
-Le volume est appliqué **en logiciel** par snapclient : à 100 % le flux est inchangé
-donc bit-perfect, en dessous les échantillons sont multipliés par un gain. C'est
-inévitable sur les HAT sans mixer matériel — voir le tableau du parc plus haut.
+## Volume et bit-perfect
+
+Le volume snapclient s'applique de deux façons, réglées par nœud via la colonne
+`mixer` de `nodes.conf` :
+
+| Mode | Ce qui se passe | Coût sous 100 % |
+|---|---|---|
+| `software` | snapclient multiplie des échantillons **16 bits**, le résultat est requantifié en 16 bits | −10 dB ≈ 1,7 bit perdu |
+| `hardware:<contrôle>` | les 16 bits arrivent **intacts** au DAC, qui atténue dans son chemin interne **32 bits** avant le modulateur | négligeable, mais non nul |
+
+**Aucun des deux n'est bit-perfect sous 100 %.** Le seul chemin réellement
+bit-perfect est de laisser les volumes à 100 % et de régler le niveau en analogique
+sur les amplis de zone. `hardware` est un net progrès, pas une préservation.
+
+⚠ `--mixer hardware` **sans nom de contrôle** cherche un mixer appelé `PCM`, absent
+du PCM512x → erreur fatale au démarrage du client. Toujours nommer le contrôle.
+L'auto-détection d'`install.sh` écarte les contrôles à plage trop courte : sur
+HiFiBerry, `Analogue` existe mais ne compte que 2 crans (0 / −6 dB), inutilisable
+comme volume.
+
+Sur ce parc, seul pcpDJ dispose du nécessaire (`hardware:Digital`, plage 0-207) ;
+les trois HiFiBerry DAC n'exposent aucun contrôle et restent en `software`.
 
 Le mode affiché est déduit des connexions snapserver plutôt que d'un `fleet.sh
 status` en SSH : un nœud rendu à LMS a coupé son snapclient, donc il apparaît

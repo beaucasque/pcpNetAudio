@@ -13,6 +13,7 @@
 #   ATTEN        atténuation, mode dmix uniquement      (défaut: 0.3)
 #   RATE         fréquence dmix                         (défaut: 48000)
 #   CARD         nom carte ALSA, auto-détecté si vide
+#   MIXER        hardware:<contrôle> | software | none    (auto-détecté si vide)
 #   NODE_NAME    nom du client snapcast                 (défaut: hostname)
 #   CLOSEOUT     secondes avant libération ALSA         (défaut: 5)
 #   PCPNA_DIR    répertoire d'installation              (défaut: /mnt/mmcblk0p2/pcpNetAudio)
@@ -30,6 +31,7 @@ ALSA_MODE="${ALSA_MODE:-hw}"
 ATTEN="${ATTEN:-0.3}"
 RATE="${RATE:-48000}"
 CARD="${CARD:-}"
+MIXER="${MIXER:-}"
 NODE_NAME="${NODE_NAME:-$(hostname)}"
 CLOSEOUT="${CLOSEOUT:-5}"
 
@@ -180,6 +182,38 @@ log "carte: $CARD ($MIXERS mixer(s) ALSA)"
 [ "$MIXERS" -eq 0 ] && [ "$ALSA_MODE" = "dmix" ] \
     && log "  pas de volume matériel : l'atténuation logicielle est indispensable"
 
+# ---------------------------------------------------------------- mixer volume
+# En "software", snapclient multiplie des echantillons 16 bits : la resolution
+# de bas niveau y passe. En "hardware", l'attenuation est faite par le DAC dans
+# son chemin interne (32 bits sur un PCM512x, avant le modulateur), ce qui
+# conserve nettement mieux les details. Ni l'un ni l'autre n'est bit-perfect
+# sous 100 % ; seul un volume laisse a 100 %, regle en analogique sur l'ampli,
+# l'est reellement.
+#
+# ATTENTION : "--mixer hardware" SANS nom de controle cherche un mixer appele
+# "PCM", absent du PCM512x -> erreur fatale au demarrage du client. Le nom doit
+# donc toujours etre explicite.
+
+if [ -z "$MIXER" ]; then
+    # Un controle n'est utilisable comme volume que s'il a une vraie plage :
+    # sur un HiFiBerry, "Analogue" existe mais ne compte que 2 crans (0/-6 dB).
+    for ctl in Digital PCM Master Playback Speaker; do
+        LIM=$(amixer -c "$CARD" sget "$ctl" 2>/dev/null \
+              | sed -n 's/.*Limits: Playback [0-9]* - \([0-9]*\).*/\1/p' | head -1)
+        if [ -n "$LIM" ] && [ "$LIM" -ge 10 ]; then
+            MIXER="hardware:$ctl"
+            log "  volume matériel via « $ctl » (plage 0-$LIM) — meilleure résolution"
+            break
+        fi
+    done
+    if [ -z "$MIXER" ]; then
+        MIXER="software"
+        log "  aucun contrôle de volume matériel exploitable : volume logiciel"
+    fi
+else
+    log "  mixer forcé : $MIXER"
+fi
+
 # ---------------------------------------------------------------- config ALSA
 
 if [ "$ALSA_MODE" = "dmix" ]; then
@@ -240,6 +274,7 @@ exec "$BIN_DIR/snapclient" \\
     "tcp://$SNAPSERVER:1704" \\
     --hostID "$NODE_NAME" \\
     --soundcard "$SND_DEVICE" \\
+    --mixer "$MIXER" \\
     >> "$LOG" 2>&1
 EOF
 chmod +x "$BIN_DIR/startup.sh"
@@ -312,6 +347,7 @@ cat <<EOF
   serveur    $SNAPSERVER
   sortie     $SND_DEVICE
   mode       $ALSA_MODE
+  volume     $MIXER
   logs       $LOG
 
 EOF

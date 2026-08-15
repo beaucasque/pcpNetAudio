@@ -59,6 +59,30 @@ def rpc(method, params=None):
     return json.loads(buf.split(b"\n")[0])
 
 
+def noeuds_connus():
+    """Noms des nœuds déclarés dans nodes.conf, hors ceux marqués skip.
+
+    C'est le filtre de l'interface. Se fier à l'IP ne suffit pas : snapserver
+    garde une entrée par client vu au moins une fois, y compris le témoin local
+    du serveur et tout client de test lancé à la main. Ces fantômes restent
+    « déconnectés » à vie et feraient basculer le mode en « partiel » pour
+    toujours. install.sh passe NODE_NAME en --hostID, donc l'id snapcast d'un
+    nœud est exactement son nom dans nodes.conf.
+    """
+    noms = set()
+    try:
+        for ligne in (REPO / "nodes.conf").read_text().splitlines():
+            ligne = ligne.strip()
+            if not ligne or ligne.startswith("#"):
+                continue
+            champs = ligne.split()
+            if len(champs) >= 3 and champs[2] != "skip":
+                noms.add(champs[0])
+    except OSError:
+        pass
+    return noms
+
+
 def etat():
     """Photo du parc : clients, volumes, et mode déduit.
 
@@ -67,13 +91,14 @@ def etat():
     C'est instantané et gratuit, là où un `fleet.sh status` coûte 2 s.
     """
     st = rpc("Server.GetStatus")["result"]["server"]
+    connus = noeuds_connus()
 
     clients = []
     for groupe in st["groups"]:
         for c in groupe["clients"]:
-            # Le client témoin local du serveur n'est pas une zone d'écoute :
-            # il sert au diagnostic et n'a rien à faire dans l'interface.
-            if c["host"]["ip"].endswith("127.0.0.1"):
+            # Seuls les nœuds declares comptent. Ecarte d'office le temoin local
+            # du serveur et les entrees fantomes laissees par des tests.
+            if connus and c["id"] not in connus:
                 continue
             clients.append({
                 "id": c["id"],
