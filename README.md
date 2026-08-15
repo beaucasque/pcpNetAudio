@@ -38,6 +38,9 @@ et une capture USB y ajouterait de la gigue.
 | `deploy.sh` | serveur | installation / mise à jour du parc (rare) |
 | `fleet.sh` | serveur | reconnaissance, bascule, diagnostic (parallélisé) |
 | `nodes.conf` | — | inventaire : nom, IP, mode ALSA, carte |
+| `webctl.py` | serveur | console web de bascule (port 8080) |
+| `pcpna-capture.service` | serveur | capture ligne → FIFO snapserver |
+| `pcpna-web.service` | serveur | unité de la console web |
 
 ## Version de Snapcast — 0.35.0 des deux côtés
 
@@ -91,8 +94,8 @@ Rien dans l'outillage ne suppose l'uniformité :
 ./fleet.sh inventory --conf    # lignes prêtes à coller dans nodes.conf
 ```
 
-Points d'attention que la reconnaissance fait remonter : RAM sous 700 Mo (Zero 2 W),
-lien Wi-Fi (relever le buffer snapcast), absence de mixer matériel, audio interne
+Points d'attention que la reconnaissance fait remonter : RAM sous 700 Mo, lien
+Wi-Fi (relever le buffer snapcast), absence de mixer matériel, audio interne
 `bcm2835` encore actif, présence d'une entrée de capture.
 
 ## Utilisation
@@ -102,8 +105,8 @@ lien Wi-Fi (relever le buffer snapcast), absence de mixer matériel, audio inter
 ./fleet.sh inventory
 
 # installation
-DRY_RUN=1 SNAPSERVER=192.168.1.50 ./deploy.sh
-SNAPSERVER=192.168.1.50 ./deploy.sh
+DRY_RUN=1 SNAPSERVER=192.168.1.27 ./deploy.sh
+SNAPSERVER=192.168.1.27 ./deploy.sh
 
 # exploitation
 ./fleet.sh status
@@ -170,7 +173,7 @@ du convertisseur est ~7,6 dB **au-dessus** du plancher du 16 bits : c'est le
 convertisseur qui limite, pas le format. Passer en 24 bits numériserait du bruit
 avec plus de précision.
 
-**Conséquence acoustique :** 150 ms équivaut à une enceinte à ~50 m. Une zone
+**Conséquence acoustique :** 100 ms équivaut à une enceinte à ~34 m. Une zone
 Snapcast placée dans la cabine produira un flam audible avec le monitoring direct,
 à n'importe quel réglage. Le monitoring cabine doit sortir de la table.
 

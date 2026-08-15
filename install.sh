@@ -4,8 +4,8 @@
 # Validé sur pCP 11.1.0 / piCore 16.x / armhf (RPi 3B+)
 #
 # Usage :
-#   SNAPSERVER=192.168.1.50 ./install.sh              # mode hw (défaut)
-#   SNAPSERVER=192.168.1.50 ALSA_MODE=dmix ./install.sh
+#   SNAPSERVER=192.168.1.27 ./install.sh              # mode hw (défaut)
+#   SNAPSERVER=192.168.1.27 ALSA_MODE=dmix ./install.sh
 #
 # Variables :
 #   SNAPSERVER   IP du snapserver                       (obligatoire)

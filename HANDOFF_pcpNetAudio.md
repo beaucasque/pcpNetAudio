@@ -83,7 +83,18 @@ source = pipe:///tmp/snapfifo?name=live
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
 codec = pcm
-buffer = 1000
+buffer = 100                   # latence de bout en bout, cf. §8
+chunk_ms = 10
+initial_volume = 100           # inerte : les clients sont en --mixer none
+```
+
+Commande effective d'un nœud :
+
+```
+snapclient tcp://192.168.1.27:1704 --hostID <nom> \
+    --soundcard hw:CARD=sndrpihifiberry \
+    --player alsa:buffer_time=40,fragments=4 \
+    --mixer none
 ```
 
 `/etc/systemd/system/pcpna-capture.service` — `enabled`, survit au reboot :
@@ -256,26 +267,45 @@ est LMS.
 ### Réglage du buffer — prochaine étape
 
 `buffer` est le budget de latence **de bout en bout**, pas un tampon réseau.
-**RÉGLÉ à 150 ms** (15 août). Mesuré par paliers, 4 nœuds, comptage des
-anomalies journalisées :
+**RÉGLÉ à 100 ms** (15 août), contre 1000 au départ.
 
-| buffer | Verdict |
+`buffer` ne se règle pas seul : il ne peut pas descendre sous la somme des étages
+FIXES de la chaîne — le tampon ALSA du lecteur et `chunk_ms` côté serveur. Aux
+défauts amont (80 ms + 20 ms) ce plancher vaut ~150 ms, et c'est précisément là
+que butait le premier réglage.
+
+| ALSA / chunk | Plancher atteignable |
 |---|---|
-| 500 / 300 / 200 | 0 anomalie |
-| **150** | **0 anomalie sur 90 s — retenu** |
-| 125 | 0 anomalie sur 40 s, mais marge mince |
-| 100 | rupture : 42 sur pcpBunker, ~760 sur les autres |
-| 75 | ~1520 partout, inutilisable |
+| 80 ms / 20 ms — défauts amont | ~150 ms |
+| **40 ms / 10 ms** | **~100 ms — retenu, 0 anomalie sur 120 s** |
+| 20 ms / 2 fragments | **pire** : décroche dès 80 ms |
 
-Le point de rupture est entre 125 et 100. 150 est à 50 % au-dessus : c'est la
-marge qui évite un décrochage en pleine soirée sur un pic de charge. Passer à 125
-gagnerait 25 ms pour une marge deux fois moindre — non retenu.
+**Descendre n'est pas monotone.** Sous 40 ms de tampon ALSA, celui-ci n'amortit
+plus la gigue d'ordonnancement et sous-alimente la carte : à 80 ms de buffer on
+passe de 2-3 anomalies à plusieurs centaines. Ne pas « optimiser » plus bas sans
+remesurer.
 
-**Conséquence acoustique à connaître :** 150 ms équivaut à une enceinte placée à
-~50 m. Si une zone Snapcast est dans la cabine, à portée du monitoring direct, le
-flam entre les deux sera audible — et il l'est à n'importe quel réglage. La parade
-n'est pas de baisser le buffer : c'est de **ne pas mettre de zone Snapcast dans la
-cabine**, dont le monitoring sort de la table à latence nulle.
+Réglages effectifs :
+
+```
+/etc/snapserver.conf     buffer = 100     chunk_ms = 10
+sur chaque nœud          --player alsa:buffer_time=40,fragments=4
+```
+
+Exposés par `ALSA_BUFFER` / `ALSA_FRAGS` dans `install.sh`, relayés par `deploy.sh`.
+
+**Le facteur limitant n'est PAS le nœud le plus faible.** Contre-intuitif mais
+mesuré : à 60 ms, `pcpBunker` (Zero W, ARMv6 mono-cœur) journalise **57** anomalies
+contre **~1370** pour les deux Zero 2 W, et sa charge ne bouge pas quand on
+quadruple sa fréquence de réveil (0,52 → 0,38). Si l'on veut un jour descendre plus
+bas, c'est du côté de `pcpKitchen` et `pcpLobby` qu'il faut chercher. Le plancher
+est paramétrique, pas matériel.
+
+**Conséquence acoustique :** 100 ms équivaut à une enceinte placée à ~34 m. Si une
+zone Snapcast est dans la cabine, à portée du monitoring direct, le flam entre les
+deux sera audible — et il l'est à n'importe quel réglage. La parade n'est pas de
+baisser le buffer : c'est de **ne pas mettre de zone Snapcast dans la cabine**,
+dont le monitoring sort de la table à latence nulle.
 
 ### Volume : décision arrêtée
 
