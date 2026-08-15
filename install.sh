@@ -271,7 +271,13 @@ cat > "$BIN_DIR/startup.sh" <<EOF
 #!/bin/sh
 # généré par pcpNetAudio
 [ -x "$BIN_DIR/snapclient" ] || exit 1
-pkill -f "$BIN_DIR/snapclient" 2>/dev/null
+# Identification EXACTE par /proc/<pid>/exe, jamais par la ligne de commande.
+# "pkill -f <chemin>" tuerait tout processus dont la cmdline mentionne ce
+# chemin -- y compris un shell de diagnostic. Constate en vrai.
+for p in /proc/[0-9]*; do
+    [ "$(readlink "$p/exe" 2>/dev/null)" = "$BIN_DIR/snapclient" ] \\
+        && kill "${p#/proc/}" 2>/dev/null
+done
 sleep 1
 # Borne le journal : au-dela de 4 Mo on repart d'une base propre plutot que de
 # laisser croitre indefiniment. On garde la fin, qui porte l'incident le plus
@@ -297,25 +303,41 @@ cat > "$BIN_DIR/pcpna-mode" <<EOF
 BIN="$BIN_DIR"
 INIT="$SL_INIT"
 
+# Liste les PID executant REELLEMENT notre binaire, via /proc/<pid>/exe.
+#
+# Ne PAS utiliser "pgrep -f <chemin>" : -f compare la ligne de commande
+# complete, donc n'importe quel processus qui se contente de MENTIONNER le
+# chemin est compte -- un shell de diagnostic, un script, une commande ssh.
+# Constate en vrai : "pcpna-mode status" annoncait snapcast alors qu'aucun
+# client ne tournait, et le pkill correspondant aurait tue l'intrus.
+snap_pids() {
+    for p in /proc/[0-9]*; do
+        [ "\$(readlink "\$p/exe" 2>/dev/null)" = "\$BIN/snapclient" ] \\
+            && echo "\${p#/proc/}"
+    done
+}
+
 case "\$1" in
     snapcast)
         sudo \$INIT stop >/dev/null 2>&1
         sleep 2
         "\$BIN/startup.sh" &
         sleep 2
-        pgrep -f "\$BIN/snapclient" >/dev/null \\
+        [ -n "\$(snap_pids)" ] \\
             && echo "snapcast" || { echo "ÉCHEC - voir $LOG" >&2; exit 1; }
         ;;
     lms)
-        pkill -f "\$BIN/snapclient" 2>/dev/null
+        for pid in \$(snap_pids); do kill "\$pid" 2>/dev/null; done
         sleep 2
         sudo \$INIT start >/dev/null 2>&1
         sleep 1
-        pgrep -f squeezelite >/dev/null \\
+        # pgrep SANS -f : compare le nom du processus, pas la ligne de
+        # commande. C'est sûr, contrairement a la variante -f.
+        pgrep squeezelite >/dev/null \\
             && echo "lms" || { echo "ÉCHEC squeezelite" >&2; exit 1; }
         ;;
     status)
-        pgrep -f "\$BIN/snapclient" >/dev/null && echo "snapcast" || echo "lms"
+        [ -n "\$(snap_pids)" ] && echo "snapcast" || echo "lms"
         ;;
     *)
         echo "Usage: pcpna-mode [snapcast|lms|status]" >&2

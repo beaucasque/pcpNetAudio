@@ -384,6 +384,10 @@ Trois causes de bugs silencieux, toutes rencontrées en vrai dans ce dépôt :
   dans une variable d'options partagée avec `scp`, qui ne connaît pas cette option.
 - **`grep -c` sort en 1 quand le compte est 0** : mortel sous `set -e` dans une
   substitution de commande.
+- **`pgrep -f` / `pkill -f` sur un chemin matchent la ligne de commande entière** :
+  tout processus qui *mentionne* le chemin est compté, y compris un shell de
+  diagnostic. Un `status` peut mentir, et un `pkill -f` **tuer un innocent**.
+  Identifier par `/proc/<pid>/exe`, qui pointe le binaire réellement exécuté.
 
 Et deux pièges ALSA :
 

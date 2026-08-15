@@ -189,9 +189,9 @@ Points qui en découlent :
 
 ---
 
-## 5. ⚠️ Neuf bugs corrigés dans l'outillage — contexte indispensable
+## 5. ⚠️ Dix bugs corrigés dans l'outillage — contexte indispensable
 
-Les scripts n'avaient jamais tourné. Neuf défauts trouvés et corrigés les 14 et
+Les scripts n'avaient jamais tourné. Dix défauts trouvés et corrigés les 14 et
 15 août ; plusieurs auraient causé des dégâts silencieux.
 
 | # | Fichier | Défaut | Conséquence évitée |
@@ -206,6 +206,8 @@ Les scripts n'avaient jamais tourné. Neuf défauts trouvés et corrigés les 14
 
 | 8 | `install.sh` | `mkdir -p "$BIN_DIR"` sans sudo | `/mnt/mmcblk0p2` est à root:root en 0755 → **échec sur tout nœud neuf**. Invisible sur pcpDJ, où le répertoire existait déjà : `mkdir -p` y était un no-op |
 | 9 | `fleet.sh` | `nodes \| while read … done` | le tube met la boucle dans un **sous-shell** : les jobs `&` sont ses enfants, le `wait` du shell principal n'attend rien, il rend la main en **53 ms**, le `cat` lit un répertoire vide et le `rm -rf` supprime la cible pendant que les ssh tournent |
+
+| 10 | `install.sh` (`pcpna-mode`, `startup.sh`) | `pgrep -f` / `pkill -f` sur un CHEMIN | `-f` compare la ligne de commande entière : tout processus qui **mentionne** le chemin est compté. `status` annonçait `snapcast` sans client actif, et le `pkill` correspondant **tuait le processus innocent**. Remplacé par une identification exacte via `/proc/<pid>/exe` |
 
 `fleet.sh inventory` a en plus reçu un `timeout 30` par nœud : `ConnectTimeout`
 ne couvre que l'établissement de la connexion, pas la durée d'exécution.
