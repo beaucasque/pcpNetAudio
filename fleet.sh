@@ -82,7 +82,7 @@ fi
 if [ "$ACTION" = "log" ]; then
     nodes | while read -r name ip; do
         echo "=== $name ($ip) ==="
-        ssh -n $SSH_OPTS "$SSH_USER@$ip" "tail -15 /tmp/snapclient.log" 2>/dev/null \
+        ssh -n $SSH_OPTS "$SSH_USER@$ip" "tail -15 /mnt/mmcblk0p2/pcpNetAudio/snapclient.log" 2>/dev/null \
             || echo "  injoignable"
     done
     exit 0

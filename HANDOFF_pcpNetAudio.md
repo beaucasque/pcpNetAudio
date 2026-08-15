@@ -366,8 +366,15 @@ nouveau : il a été implémenté, mesuré, puis retiré en connaissance de caus
 
 ## 10. Pièges connus
 
-**`/tmp` est en tmpfs** — sur pCP *et* sur le serveur. Vaut pour le FIFO :
-`pcpna-capture.service` le recrée à chaque démarrage.
+**`/tmp` est en tmpfs sur pCP, et c'est la RACINE du système** — 385 Mo partagés
+avec la RAM sur les nœuds à 427 Mo. Un `/` plein est une panne franche.
+
+C'est pourquoi le journal de snapclient est en **`/mnt/mmcblk0p2/pcpNetAudio/snapclient.log`**
+(ext4, 28 Go) et non dans `/tmp` : snapclient écrit en ajout sans borne, et lors
+d'un essai à 60 ms de buffer un nœud a produit **1746 lignes en 30 s**. `install.sh`
+le tronque en plus au-delà de 4 Mo, en gardant la fin — c'est l'incident récent qui
+intéresse, pas le début. Bénéfice secondaire : il survit au reboot, ce qui permet
+d'analyser après coup un incident survenu pendant une soirée.
 
 **busybox, pas coreutils** — `#!/bin/sh`, pas de bashisms, `[ ]` et non `[[ ]]`,
 `rm -f` dans les scripts. Et **`ip` n'existe pas** : utiliser `ifconfig`,
@@ -395,8 +402,13 @@ c'est l'argument pour l'extraction de `.deb` plutôt que la compilation.
 - **snapclient relâche-t-il la carte sans flux ?** Si oui, la cohabitation avec
   squeezelite devient automatique et `pcpna-mode` ne sert plus qu'au forçage.
   Testable dès l'Étape D.
-- **Latence de bout en bout réellement atteignable** — à mesurer en descendant
-  `buffer`, une fois le parc en place.
+- **Pourquoi les Zero 2 W décrochent-ils avant le Zero W ?** `pcpKitchen` et
+  `pcpLobby` sont matériellement identiques (`rev 902120`) et lâchent au même seuil,
+  à trente anomalies près — mais **plus tôt que `pcpBunker`**, qui est pourtant un
+  Zero W mono-cœur ARMv6, plus ancien et plus faible. Ce sont eux qui fixent le
+  plancher de latence du parc. Pistes non explorées : modèle d'adaptateur Ethernet
+  USB, interruptions du Wi-Fi/BT embarqué, throttling thermique. À creuser si l'on
+  veut descendre sous 80 ms.
 
 ---
 

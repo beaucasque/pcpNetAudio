@@ -48,7 +48,14 @@ ALSA_BUFFER="${ALSA_BUFFER:-40}"
 ALSA_FRAGS="${ALSA_FRAGS:-4}"
 
 BIN_DIR="$PCPNA_DIR/bin"
-LOG="/tmp/snapclient.log"
+# Le journal vit sur ext4, PAS dans /tmp.
+# /tmp est un tmpfs qui EST la racine du systeme sur pCP : 385 Mo partages avec
+# la RAM. Or snapclient ecrit en ajout, sans borne -- lors d'un essai a 60 ms de
+# buffer, un noeud a produit 1746 lignes en 30 s. Un incident prolonge remplirait
+# le tmpfs d'un noeud a 427 Mo, et un / plein sur piCorePlayer est une panne
+# franche. Sur p2 il y a 28 Go, et le journal survit au reboot -- ce qui est
+# justement ce qu'on veut pour analyser un incident survenu pendant une soiree.
+LOG="$PCPNA_DIR/snapclient.log"
 WORK="/tmp/pcpna-build.$$"
 SL_INIT="/usr/local/etc/init.d/squeezelite"
 PCP_CFG="/usr/local/etc/pcp/pcp.cfg"
@@ -266,6 +273,12 @@ cat > "$BIN_DIR/startup.sh" <<EOF
 [ -x "$BIN_DIR/snapclient" ] || exit 1
 pkill -f "$BIN_DIR/snapclient" 2>/dev/null
 sleep 1
+# Borne le journal : au-dela de 4 Mo on repart d'une base propre plutot que de
+# laisser croitre indefiniment. On garde la fin, qui porte l'incident le plus
+# recent, pas le debut.
+if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 4194304 ]; then
+    tail -c 1048576 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
 # Forme URL introduite en snapcast 0.32.0. "--host" et "--port" restent
 # acceptes en 0.35 mais sont DEPRECIES ; 1704 est le port du flux audio.
 exec "$BIN_DIR/snapclient" \\

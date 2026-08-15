@@ -358,7 +358,7 @@ L'architecture s'y nomme **`armhf`**, là où TinyCore amont utilise `armv7`
 
 ```sh
 pcpna-mode status
-tail -f /tmp/snapclient.log
+tail -f /mnt/mmcblk0p2/pcpNetAudio/snapclient.log
 ldd /mnt/mmcblk0p2/pcpNetAudio/bin/snapclient | grep 'not found'
 aplay -l && ps aux | grep '[s]queezelite'
 ```
