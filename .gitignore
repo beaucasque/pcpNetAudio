@@ -1,0 +1,3 @@
+# Cache d'import Python, genere en testant webctl.py a la main.
+__pycache__/
+*.pyc
