@@ -115,6 +115,35 @@ SNAPSERVER=192.168.1.50 ./deploy.sh
 
 Sur un nœud isolé : `pcpna-mode snapcast|lms|status`.
 
+## Console web
+
+`webctl.py` sert une page de contrôle sur le port 8080 du serveur, pensée pour le
+téléphone depuis la cabine :
+
+```sh
+sudo systemctl enable --now pcpna-web        # unité pcpna-web.service
+```
+
+Deux fonctions, délibérément :
+
+- **bascule globale** — 100 % piCorePlayer ou 100 % Snapcast. Pas de sélecteur par
+  zone : le projet assume un mode ou l'autre avec ses forces, pas un panachage. La
+  bascule délègue à `fleet.sh`, aucune logique n'est dupliquée.
+- **volume par snapclient**, qui est le réglage réellement utilisé au quotidien.
+
+Le volume est appliqué **en logiciel** par snapclient : à 100 % le flux est inchangé
+donc bit-perfect, en dessous les échantillons sont multipliés par un gain. C'est
+inévitable sur les HAT sans mixer matériel — voir le tableau du parc plus haut.
+
+Le mode affiché est déduit des connexions snapserver plutôt que d'un `fleet.sh
+status` en SSH : un nœud rendu à LMS a coupé son snapclient, donc il apparaît
+déconnecté. C'est instantané là où l'interrogation SSH coûte deux secondes.
+
+La page n'a **pas d'authentification** et expose un point d'entrée qui lance
+`fleet.sh`. Acceptable sur un réseau domestique ; c'est la raison pour laquelle le
+paramètre de mode est validé par liste blanche stricte et jamais interpolé dans un
+shell.
+
 ## hw ou dmix
 
 Sur un nœud pCP, **squeezelite tient le DAC en `hw:` exclusif**. snapclient ne peut pas

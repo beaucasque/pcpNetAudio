@@ -1,0 +1,22 @@
+[Unit]
+Description=pcpNetAudio - console web de controle du parc
+Documentation=https://github.com/beaucasque/pcpNetAudio
+After=network-online.target snapserver.service
+Wants=snapserver.service
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/python3 /home/patrice/pcpNetAudio/webctl.py 8080
+WorkingDirectory=/home/patrice/pcpNetAudio
+
+# Tourne sous patrice, et NON sous un utilisateur systeme dedie : la bascule
+# delegue a fleet.sh, qui joint les noeuds en SSH avec ~patrice/.ssh/id_ed25519
+# et le multiplexage declare dans ~patrice/.ssh/config.
+User=patrice
+Group=patrice
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

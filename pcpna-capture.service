@@ -1,0 +1,37 @@
+[Unit]
+Description=pcpNetAudio - capture entree ligne HiFiBerry DAC+ADC vers le FIFO snapserver
+Documentation=https://github.com/beaucasque/pcpNetAudio
+# La capture n'a de sens que si snapserver lit a l'autre bout du FIFO :
+# BindsTo la fait tomber avec lui, After garantit l'ordre au demarrage.
+After=snapserver.service sound.target
+BindsTo=snapserver.service
+
+[Service]
+Type=exec
+# /tmp est en tmpfs : le FIFO disparait a chaque reboot. snapserver le recree
+# de son cote (mode "create"), mais on ne depend pas de l'ordre de demarrage.
+ExecStartPre=/bin/sh -c '[ -p /tmp/snapfifo ] || { rm -f /tmp/snapfifo; mkfifo -m 0666 /tmp/snapfifo; }'
+# -t raw est OBLIGATOIRE : sans lui arecord ecrit un en-tete RIFF que la source
+# pipe:// de snapserver interprete comme de l'audio, d'ou un claquement initial.
+# Le format doit rester aligne sur "sampleformat" dans /etc/snapserver.conf.
+# La carte est adressee par NOM et jamais par numero : bcm2835 etant desactive,
+# le HiFiBerry est card 0 aujourd'hui, mais vc4hdmi peut decaler la numerotation.
+ExecStart=/bin/sh -c 'exec /usr/bin/arecord -D hw:CARD=sndrpihifiberry -f S16_LE -r 48000 -c 2 -t raw > /tmp/snapfifo'
+
+# Meme utilisateur que snapserver : le FIFO lui appartient.
+# audio est necessaire pour ouvrir /dev/snd/* (root:audio, 0660).
+User=snapserver
+Group=snapserver
+SupplementaryGroups=audio
+
+# Si snapserver redemarre, le lecteur du FIFO disparait, arecord prend un EPIPE
+# et meurt : on le releve systematiquement.
+Restart=always
+RestartSec=2
+
+# Priorite ordonnancement : la capture ne doit pas etre prise de vitesse par
+# le reste du systeme sur un 3B+ a 4 coeurs.
+Nice=-10
+
+[Install]
+WantedBy=multi-user.target
