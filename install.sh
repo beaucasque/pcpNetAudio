@@ -110,6 +110,24 @@ else
     VARIANTS="bullseye bookworm trixie"
 fi
 
+# Binaire deja en place et fonctionnel : on ne retelecharge pas.
+#
+# install.sh est idempotent et relance a chaque deploiement, or l'essentiel de
+# son travail est de la configuration. Interroger l'API GitHub a chaque fois rend
+# un redeploiement dependant d'Internet et le fait AVORTER sur un simple timeout
+# -- constate en vrai sur pcpLobby : "wget: download timed out", et rien n'a ete
+# configure alors que le binaire etait deja installe et valide.
+#
+# FORCE_BIN=1 pour forcer la mise a jour du binaire.
+if [ -z "$FORCE_BIN" ] && [ -x "$BIN_DIR/snapclient" ] \
+   && VER=$("$BIN_DIR/snapclient" --version 2>/dev/null | head -1); then
+    INSTALLED=$(cat "$PCPNA_DIR/.variant" 2>/dev/null || echo "inconnu")
+    log "binaire déjà présent : $VER ($INSTALLED) — téléchargement ignoré"
+    log "  (FORCE_BIN=1 pour le mettre à jour)"
+    SKIP_DL=1
+fi
+
+if [ -z "$SKIP_DL" ]; then
 mkdir -p "$WORK" && cd "$WORK"
 
 log "recherche de la dernière release snapcast"
@@ -157,6 +175,7 @@ chmod +x "$BIN_DIR/snapclient"
 printf '%s\n' "$INSTALLED" > "$PCPNA_DIR/.variant"
 cd / && rm -rf "$WORK"
 log "binaire installé ($INSTALLED)"
+fi   # fin du bloc de telechargement
 
 # ---------------------------------------------------------------- carte ALSA
 
@@ -351,11 +370,29 @@ chmod +x "$BIN_DIR/pcpna-mode"
 # Payload sur ext4 : persiste nativement, aucun coût RAM au boot.
 # /opt et /home sont déjà dans .filetool.lst par défaut.
 
+# Le symlink /usr/local/bin/pcpna-mode est un CONFORT, PAS une dependance.
+#
+# fleet.sh appelle pcpna-mode par son chemin absolu sur ext4. Le symlink ne sert
+# qu'a la frappe manuelle sur un noeud. Rien ne casse s'il est absent.
+#
+# HISTOIRE, a ne pas repeter : une version anterieure ajoutait la pose du lien a
+# la FIN de bootlocal.sh. Sur pcpBunker (Zero W, armv6) la ligne n'etait jamais
+# atteinte -- bootlocal.sh appelle "pcp_startup.sh | tee", et ce pipeline ne
+# rendait pas la main sur ce noeud. J'ai alors deplace la ligne AVANT
+# pcp_startup.sh : le noeud n'a plus demarre du tout. Ni SSH ni serveur web,
+# seulement le ping. Recuperation par carte SD et "norestore" dans cmdline.txt.
+#
+# Lecon : NE RIEN INSERER AVANT pcp_startup.sh DANS bootlocal.sh. La pose du lien
+# est desormais ajoutee en fin de fichier et purement optionnelle -- si elle n'est
+# jamais atteinte, le parc fonctionne quand meme.
+BOOT_MARK="pcpna-mode /usr/local/bin"
 BOOT_LINE="[ -x $BIN_DIR/pcpna-mode ] && ln -sf $BIN_DIR/pcpna-mode /usr/local/bin/pcpna-mode"
-if ! grep -qF "pcpna-mode /usr/local/bin" /opt/bootlocal.sh 2>/dev/null; then
-    echo "$BOOT_LINE" | sudo tee -a /opt/bootlocal.sh >/dev/null
-    log "symlink pcpna-mode ajouté à bootlocal.sh"
-fi
+
+sudo sed -i "\\|$BOOT_MARK|d" /opt/bootlocal.sh 2>/dev/null || true
+echo "$BOOT_LINE" | sudo tee -a /opt/bootlocal.sh >/dev/null
+log "symlink pcpna-mode : ligne ajoutée en FIN de bootlocal.sh (optionnelle)"
+
+# Pose immediate, qui elle est certaine.
 sudo ln -sf "$BIN_DIR/pcpna-mode" /usr/local/bin/pcpna-mode
 
 # En mode hw, snapclient NE démarre PAS au boot : l'état par défaut est LMS.

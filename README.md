@@ -384,6 +384,15 @@ Trois causes de bugs silencieux, toutes rencontrées en vrai dans ce dépôt :
   dans une variable d'options partagée avec `scp`, qui ne connaît pas cette option.
 - **`grep -c` sort en 1 quand le compte est 0** : mortel sous `set -e` dans une
   substitution de commande.
+- **NE RIEN INSÉRER AVANT `pcp_startup.sh` DANS `bootlocal.sh`.** Une ligne placée
+  là — même un simple sous-shell en arrière-plan — peut empêcher le nœud de démarrer :
+  ni SSH, ni serveur web, seulement le ping. Récupération uniquement par carte SD, en
+  ajoutant `norestore` à `cmdline.txt`. Vécu sur un Zero W.
+- **Une ligne ajoutée en FIN de `bootlocal.sh` peut n'être jamais atteinte** :
+  `pcp_startup.sh` y est appelé dans un pipeline `| tee`, qui ne rend pas la main sur
+  tous les nœuds. Ne jamais faire dépendre le fonctionnement de ce qui suit — `fleet.sh`
+  appelle donc `pcpna-mode` par son **chemin absolu** sur ext4, et le symlink dans
+  `/usr/local/bin` n'est qu'un confort.
 - **`pgrep -f` / `pkill -f` sur un chemin matchent la ligne de commande entière** :
   tout processus qui *mentionne* le chemin est compté, y compris un shell de
   diagnostic. Un `status` peut mentir, et un `pkill -f` **tuer un innocent**.

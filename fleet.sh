@@ -22,6 +22,12 @@ SSH_USER="${SSH_USER:-tc}"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5"
 PROBE="${PROBE:-probe.sh}"
 
+# pcpna-mode est appele par son CHEMIN ABSOLU sur ext4, jamais via le PATH.
+# Le symlink /usr/local/bin/pcpna-mode depend de bootlocal.sh, donc de
+# l'ordonnancement du boot -- il a deja manque a l'appel sur un noeud. Le binaire
+# et le script, eux, vivent sur ext4 et sont la des que p2 est monte.
+PCPNA="${PCPNA:-/mnt/mmcblk0p2/pcpNetAudio/bin/pcpna-mode}"
+
 ACTION="$1"; shift 2>/dev/null || true
 
 CONF_FLAG=""
@@ -104,7 +110,7 @@ nodes > "$TMP/.list"
 
 while read -r name ip; do
     (
-        r=$(ssh -n $SSH_OPTS "$SSH_USER@$ip" "pcpna-mode $ACTION" 2>&1) \
+        r=$(ssh -n $SSH_OPTS "$SSH_USER@$ip" "$PCPNA $ACTION" 2>&1) \
             && printf '%-12s %s\n' "$name" "$r" > "$TMP/$name" \
             || printf '%-12s ÉCHEC (%s)\n' "$name" "$(echo "$r" | head -1)" > "$TMP/$name"
     ) &
