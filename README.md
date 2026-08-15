@@ -164,8 +164,15 @@ Bénéfice secondaire : un étage de moins dans la chaîne, et plus de processus
 `/etc/systemd/system/snapserver.service.d/audio.conf`. Et `pcpna-capture` doit être
 **désactivé**, sinon il rouvre la carte au boot et entre en conflit.
 
-Quelques `onResync` et `Not enough data` apparaissent dans les secondes suivant un
-démarrage, le temps que la cadence s'établisse. Mesuré : plus rien ensuite sur 60 s.
+**Chaque bascule vers snapcast produit un transitoire.** Le tampon de capture ALSA a
+accumulé du retard que snapserver rattrape d'un coup — `fast forwarding from 149,5 ms
+to 30 ms` — d'où un `onResync` d'environ 117 ms et un XRUN chez les clients. C'est
+audible comme un bref accroc **au moment de la bascule**, puis plus rien : 0 anomalie
+sur 150 s en régime permanent.
+
+Conséquence pour qui mesure : **purger les journaux 30 s après le démarrage**, sinon
+on impute au réglage ce qui n'appartient qu'à la mise en route. C'est ce qui m'a fait
+croire un instant que 80 ms était marginal.
 
 ## Latence
 
@@ -173,15 +180,20 @@ démarrage, le temps que la cadence s'établisse. Mesuré : plus rien ensuite su
 programme la lecture à *(instant de capture + buffer)*. Ce n'est pas un tampon
 réseau.
 
-Réglé à **100 ms**, contre 1000 par défaut. Mais `buffer` ne se règle pas seul : il
-ne peut pas descendre sous la somme des étages fixes de la chaîne, à savoir le
-tampon ALSA du lecteur et `chunk_ms` côté serveur.
+Réglé à **80 ms**, contre 1000 par défaut. Mais `buffer` ne se règle pas seul : il
+ne peut pas descendre sous la somme des étages fixes de la chaîne — tampon ALSA du
+lecteur, `chunk_ms` côté serveur, et le FIFO tant qu'il en restait un.
 
-| ALSA / chunk | Plancher atteint |
+| Configuration | Plancher atteint |
 |---|---|
-| 80 ms / 20 ms (défauts amont) | ~150 ms |
-| **40 ms / 10 ms** | **~100 ms — retenu** |
-| 20 ms / 2 fragments | **pire** : décroche dès 80 ms |
+| ALSA 80 / chunk 20, source `pipe://` (défauts amont) | ~150 ms |
+| ALSA 40 / chunk 10, source `pipe://` | ~100 ms |
+| ALSA 40 / chunk 10, **source `alsa://`** | **~80 ms — retenu** |
+| ALSA 20 / 2 fragments | **pire** : décroche dès 80 ms |
+
+Chaque palier a demandé de s'attaquer à un étage différent : d'abord `buffer`, puis
+les tampons fixes, puis la suppression du FIFO. Régler `buffer` seul plafonnait
+à 150 ms.
 
 Descendre n'est **pas monotone**. Sous 40 ms, le tampon ALSA n'a plus assez de
 profondeur pour absorber la gigue d'ordonnancement et se met à sous-alimenter la
@@ -202,7 +214,7 @@ du convertisseur est ~7,6 dB **au-dessus** du plancher du 16 bits : c'est le
 convertisseur qui limite, pas le format. Passer en 24 bits numériserait du bruit
 avec plus de précision.
 
-**Conséquence acoustique :** 100 ms équivaut à une enceinte à ~34 m. Une zone
+**Conséquence acoustique :** 80 ms équivaut à une enceinte à ~27 m. Une zone
 Snapcast placée dans la cabine produira un flam audible avec le monitoring direct,
 à n'importe quel réglage. Le monitoring cabine doit sortir de la table.
 

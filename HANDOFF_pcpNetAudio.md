@@ -84,7 +84,7 @@ source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry\
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
 codec = pcm
-buffer = 100                   # latence de bout en bout, cf. §8
+buffer = 80                    # latence de bout en bout, cf. §8
 chunk_ms = 10
 initial_volume = 100           # inerte : les clients sont en --mixer none
 ```
@@ -276,18 +276,29 @@ est LMS.
 ### Réglage du buffer — prochaine étape
 
 `buffer` est le budget de latence **de bout en bout**, pas un tampon réseau.
-**RÉGLÉ à 100 ms** (15 août), contre 1000 au départ.
+**RÉGLÉ à 80 ms** (15 août), contre 1000 au départ — soit −92 %.
 
 `buffer` ne se règle pas seul : il ne peut pas descendre sous la somme des étages
 FIXES de la chaîne — le tampon ALSA du lecteur et `chunk_ms` côté serveur. Aux
 défauts amont (80 ms + 20 ms) ce plancher vaut ~150 ms, et c'est précisément là
 que butait le premier réglage.
 
-| ALSA / chunk | Plancher atteignable |
+| Configuration | Plancher |
 |---|---|
-| 80 ms / 20 ms — défauts amont | ~150 ms |
-| **40 ms / 10 ms** | **~100 ms — retenu, 0 anomalie sur 120 s** |
-| 20 ms / 2 fragments | **pire** : décroche dès 80 ms |
+| ALSA 80 / chunk 20, `pipe://` — défauts amont | ~150 ms |
+| ALSA 40 / chunk 10, `pipe://` | ~100 ms |
+| ALSA 40 / chunk 10, **`alsa://`** | **~80 ms — retenu** |
+| ALSA 20 / 2 fragments | **pire** : décroche dès 80 ms |
+
+Vérifié à 80 ms : **0 anomalie sur 150 s** en régime permanent, clients et serveur.
+
+⚠ **Mesurer le régime permanent, pas le démarrage.** Chaque bascule vers snapcast
+produit un transitoire — le tampon de capture ALSA a accumulé du retard que
+snapserver rattrape d'un coup (`fast forwarding from 149,5 ms to 30 ms`), d'où un
+`onResync` d'environ 117 ms et un XRUN chez les clients. C'est audible comme un
+bref accroc **au moment de la bascule**, puis plus rien. Purger les journaux
+30 s après le démarrage avant toute mesure, sinon on impute au réglage ce qui
+n'appartient qu'à la mise en route.
 
 **Descendre n'est pas monotone.** Sous 40 ms de tampon ALSA, celui-ci n'amortit
 plus la gigue d'ordonnancement et sous-alimente la carte : à 80 ms de buffer on
@@ -297,7 +308,7 @@ remesurer.
 Réglages effectifs :
 
 ```
-/etc/snapserver.conf     buffer = 100     chunk_ms = 10
+/etc/snapserver.conf     buffer = 80      chunk_ms = 10
 sur chaque nœud          --player alsa:buffer_time=40,fragments=4
 ```
 
@@ -310,7 +321,7 @@ quadruple sa fréquence de réveil (0,52 → 0,38). Si l'on veut un jour descend
 bas, c'est du côté de `pcpKitchen` et `pcpLobby` qu'il faut chercher. Le plancher
 est paramétrique, pas matériel.
 
-**Conséquence acoustique :** 100 ms équivaut à une enceinte placée à ~34 m. Si une
+**Conséquence acoustique :** 80 ms équivaut à une enceinte placée à ~27 m. Si une
 zone Snapcast est dans la cabine, à portée du monitoring direct, le flam entre les
 deux sera audible — et il l'est à n'importe quel réglage. La parade n'est pas de
 baisser le buffer : c'est de **ne pas mettre de zone Snapcast dans la cabine**,
