@@ -256,10 +256,26 @@ est LMS.
 ### Réglage du buffer — prochaine étape
 
 `buffer` est le budget de latence **de bout en bout**, pas un tampon réseau.
-Actuellement à 1000 ms, jamais ajusté. Descendre par paliers : 300 → 200 → 150.
-**Ne pas partir de 50**, c'est irréaliste. Le parc étant **entièrement filaire**
-(vérifié : les trois Zero passent par un adaptateur USB, aucun Wi-Fi), il n'y a
-aucune raison de rester haut.
+**RÉGLÉ à 150 ms** (15 août). Mesuré par paliers, 4 nœuds, comptage des
+anomalies journalisées :
+
+| buffer | Verdict |
+|---|---|
+| 500 / 300 / 200 | 0 anomalie |
+| **150** | **0 anomalie sur 90 s — retenu** |
+| 125 | 0 anomalie sur 40 s, mais marge mince |
+| 100 | rupture : 42 sur pcpBunker, ~760 sur les autres |
+| 75 | ~1520 partout, inutilisable |
+
+Le point de rupture est entre 125 et 100. 150 est à 50 % au-dessus : c'est la
+marge qui évite un décrochage en pleine soirée sur un pic de charge. Passer à 125
+gagnerait 25 ms pour une marge deux fois moindre — non retenu.
+
+**Conséquence acoustique à connaître :** 150 ms équivaut à une enceinte placée à
+~50 m. Si une zone Snapcast est dans la cabine, à portée du monitoring direct, le
+flam entre les deux sera audible — et il l'est à n'importe quel réglage. La parade
+n'est pas de baisser le buffer : c'est de **ne pas mettre de zone Snapcast dans la
+cabine**, dont le monitoring sort de la table à latence nulle.
 
 ### Volume : décision arrêtée
 

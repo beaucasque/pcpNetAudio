@@ -135,6 +135,30 @@ Après une bascule vers LMS, les quatre nœuds sont de nouveau visibles dans Lyr
 **en 6 secondes**, connectés et allumés. La lecture ne reprend pas d'elle-même : il
 faut la relancer depuis Lyrion.
 
+## Latence
+
+`buffer` dans `snapserver.conf` **est** la latence de bout en bout : snapclient
+programme la lecture à *(instant de capture + buffer)*. Ce n'est pas un tampon
+réseau.
+
+Réglé à **150 ms**, mesuré par paliers sur les 4 nœuds. Le point de rupture est
+entre 125 et 100 ms : à 100 ms les décrochages sont massifs, à 125 ms c'est propre
+mais la marge est de 25 ms seulement. 150 ms tient sans une anomalie sur 90 s et
+laisse 50 % de marge — de quoi encaisser un pic de charge sans couper une zone en
+plein set.
+
+**La profondeur de bits n'a aucun effet sur la latence** : un chunk de 20 ms dure
+20 ms qu'il soit en 16 ou 24 bits. Et le 16 bits n'est pas non plus un compromis de
+qualité ici — le plancher de bruit mesuré de l'ADC est de 0,7 LSB RMS, contre
+~0,29 LSB pour le bruit de quantification d'un 16 bits dithéré. Le bruit analogique
+du convertisseur est ~7,6 dB **au-dessus** du plancher du 16 bits : c'est le
+convertisseur qui limite, pas le format. Passer en 24 bits numériserait du bruit
+avec plus de précision.
+
+**Conséquence acoustique :** 150 ms équivaut à une enceinte à ~50 m. Une zone
+Snapcast placée dans la cabine produira un flam audible avec le monitoring direct,
+à n'importe quel réglage. Le monitoring cabine doit sortir de la table.
+
 ## Volume : il n'y en a pas, et c'est délibéré
 
 `install.sh` lance snapclient avec **`--mixer none`**. Le flux traverse le client
