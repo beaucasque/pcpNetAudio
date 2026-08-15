@@ -16,8 +16,7 @@ Source analogique (table de mixage, platines)
    HAT HiFiBerry avec entrée ligne (I2S)
         │
    RPi 3B+ « serveur » — Debian Trixie 64 bits Lite
-        ├── arecord -t raw → FIFO
-        ├── snapserver
+        ├── snapserver (source alsa:// — lit la carte directement)
         └── deploy.sh / fleet.sh  (contrôle du parc par SSH)
         │
         ├──────────── Ethernet ────────────┐
@@ -39,7 +38,7 @@ et une capture USB y ajouterait de la gigue.
 | `fleet.sh` | serveur | reconnaissance, bascule, diagnostic (parallélisé) |
 | `nodes.conf` | — | inventaire : nom, IP, mode ALSA, carte |
 | `webctl.py` | serveur | console web de bascule (port 8080) |
-| `pcpna-capture.service` | serveur | capture ligne → FIFO snapserver |
+| `pcpna-capture.service` | serveur | **superseded** — capture via arecord + FIFO, gardé en repli |
 | `pcpna-web.service` | serveur | unité de la console web |
 
 ## Version de Snapcast — 0.35.0 des deux côtés
@@ -137,6 +136,36 @@ Aucun réglage de volume n'est exposé — voir la section suivante.
 Après une bascule vers LMS, les quatre nœuds sont de nouveau visibles dans Lyrion
 **en 6 secondes**, connectés et allumés. La lecture ne reprend pas d'elle-même : il
 faut la relancer depuis Lyrion.
+
+## Source de capture : `alsa://`, pas `pipe://`
+
+snapserver lit la carte **directement** :
+
+```
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&silence_threshold_percent=0.01&idle_threshold=3000
+```
+
+L'approche initiale passait par `arecord -t raw` vers un FIFO, alimentant une source
+`pipe://`. Elle fonctionne — `pcpna-capture.service` est conservé en repli — mais
+elle a un défaut : **`pipe://` ne sait pas distinguer le silence de l'absence de
+données.** `arecord` numérise en permanence le plancher de bruit de l'ADC, donc le
+flux restait éternellement `playing`, même entrée débranchée. L'indicateur mesurait
+le débit d'octets, pas la présence de signal.
+
+`alsa://` expose `silence_threshold_percent`, que `pipe://` n'a pas. À 0,01 %
+(≈ −80 dBFS), le plancher de bruit mesuré de l'ADC (−93 dBFS) passe sous le seuil :
+le flux bascule en `idle`, et `playing` signifie enfin qu'il y a du son.
+
+Bénéfice secondaire : un étage de moins dans la chaîne, et plus de processus
+`arecord`.
+
+⚠ snapserver doit alors ouvrir la carte lui-même. `/dev/snd/*` étant en `root:audio`
+0660, l'unité a besoin de `SupplementaryGroups=audio` — posé en override dans
+`/etc/systemd/system/snapserver.service.d/audio.conf`. Et `pcpna-capture` doit être
+**désactivé**, sinon il rouvre la carte au boot et entre en conflit.
+
+Quelques `onResync` et `Not enough data` apparaissent dans les secondes suivant un
+démarrage, le temps que la cadence s'établisse. Mesuré : plus rien ensuite sur 60 s.
 
 ## Latence
 

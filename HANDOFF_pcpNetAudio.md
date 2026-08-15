@@ -28,8 +28,8 @@ Source analogique
  HAT HiFiBerry DAC+ADC line-in (I2S)
       │
  RPi 3B+ serveur « piSnap » — Trixie 64 bits — 192.168.1.27
-      ├── arecord -t raw → /tmp/snapfifo     (pcpna-capture.service)
-      ├── snapserver 0.35.0                  (flux « live », codec pcm)
+      ├── snapserver 0.35.0   source alsa:// — lit la carte directement
+      │                       (flux « live », codec pcm)
       └── deploy.sh / fleet.sh → contrôle du parc par SSH
       │
       ├────────── Ethernet ──────────┐
@@ -79,7 +79,8 @@ Formats acceptés : **44,1 → 192 kHz, 16/24/32 bits**.
 `/etc/snapserver.conf` (sauvegarde `.bak-pcpna`) :
 
 ```
-source = pipe:///tmp/snapfifo?name=live
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry\
+         &silence_threshold_percent=0.01&idle_threshold=3000
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
 codec = pcm
@@ -97,9 +98,17 @@ snapclient tcp://192.168.1.27:1704 --hostID <nom> \
     --mixer none
 ```
 
-`/etc/systemd/system/pcpna-capture.service` — `enabled`, survit au reboot :
-`ExecStartPre` recrée le FIFO (`/tmp` est en tmpfs), `BindsTo=snapserver.service`
-pour que la capture tombe et remonte avec le serveur.
+**La capture ne passe plus par `arecord` + FIFO.** snapserver lit la carte
+directement via sa source `alsa://`, ce qui supprime un étage et — surtout — permet
+la détection de silence : `pipe://` ne sait pas distinguer le silence de l'absence
+de données, donc le flux restait `playing` même entrée débranchée.
+
+Deux conséquences à ne pas oublier :
+
+- snapserver ouvre la carte lui-même, `/dev/snd/*` est en `root:audio` 0660 → override
+  `SupplementaryGroups=audio` dans `/etc/systemd/system/snapserver.service.d/audio.conf` ;
+- **`pcpna-capture.service` est DÉSACTIVÉ.** Le fichier reste au dépôt comme repli,
+  mais le réactiver rouvrirait la carte et entrerait en conflit avec snapserver.
 
 Ports : **1704** flux, **1705** contrôle JSON-RPC, **1780** interface web.
 
