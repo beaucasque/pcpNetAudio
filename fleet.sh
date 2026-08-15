@@ -93,13 +93,22 @@ fi
 TMP="/tmp/pcpna-fleet.$$"
 mkdir -p "$TMP"
 
-nodes | while read -r name ip; do
+# NE PAS ecrire "nodes | while read ... done" : le tube place la boucle dans un
+# SOUS-SHELL, les jobs "&" deviennent ses enfants, et le "wait" du shell
+# principal n'a alors rien a attendre -- il rend la main aussitot, le cat lit un
+# repertoire vide et le rm -rf supprime la cible pendant que les ssh tournent
+# encore ("Directory nonexistent"). En lisant depuis un FICHIER, la boucle reste
+# dans le shell courant et wait fonctionne.
+# Le fichier est prefixe d'un point : "$TMP"/* ne le ramassera pas.
+nodes > "$TMP/.list"
+
+while read -r name ip; do
     (
         r=$(ssh -n $SSH_OPTS "$SSH_USER@$ip" "pcpna-mode $ACTION" 2>&1) \
             && printf '%-12s %s\n' "$name" "$r" > "$TMP/$name" \
             || printf '%-12s ÉCHEC (%s)\n' "$name" "$(echo "$r" | head -1)" > "$TMP/$name"
     ) &
-done
+done < "$TMP/.list"
 wait
 
 cat "$TMP"/* 2>/dev/null | sort

@@ -124,7 +124,13 @@ done
 
 [ -n "$INSTALLED" ] || die "aucune variante Debian fonctionnelle"
 
-mkdir -p "$BIN_DIR"
+# /mnt/mmcblk0p2 appartient a root:root en 0755 : l'utilisateur tc ne peut PAS
+# y creer de repertoire. Il faut sudo pour la creation, puis rendre l'arbre a
+# tc pour que le reste du script (binaire, scripts, .variant) ecrive sans sudo.
+# Ne se voyait pas sur un noeud ou le repertoire existait deja : mkdir -p y est
+# un no-op silencieux.
+sudo mkdir -p "$BIN_DIR"
+sudo chown -R "$(id -un):$(id -gn)" "$PCPNA_DIR"
 cp usr/bin/snapclient "$BIN_DIR/snapclient"
 chmod +x "$BIN_DIR/snapclient"
 printf '%s\n' "$INSTALLED" > "$PCPNA_DIR/.variant"
