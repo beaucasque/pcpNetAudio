@@ -1,10 +1,10 @@
 # Handoff — pcpNetAudio
 
 **Destinataire :** agent en SSH sur le Raspberry Pi 3B+ serveur.
-**Dernière mise à jour :** 14 août 2026, session « installation serveur ».
-**Dépôt :** `https://github.com/beaucasque/pcpNetAudio` — **vide à ce jour**, le
-contenu réel est dans `/home/patrice/pcpNetAudio` sur le serveur. Un premier
-commit reste à faire.
+**Dernière mise à jour :** 15 août 2026, session « déploiement du parc ».
+**Dépôt :** `https://github.com/beaucasque/pcpNetAudio` — à jour, poussé depuis
+`/home/patrice/pcpNetAudio` sur le serveur (`gh` authentifié, credential helper
+posé : `git push` ne demande plus rien).
 
 | | |
 |---|---|
@@ -59,7 +59,7 @@ Tout ce qui suit a été installé et vérifié le 14 août 2026.
 |---|---|
 | OS | Debian Trixie 64 bits, `aarch64`, noyau 6.18.34 |
 | Hostname | `piSnap` |
-| IP | **192.168.1.27, en DHCP — réservation Omada toujours à faire** |
+| IP | **192.168.1.27, réservation DHCP Omada faite** |
 | HAT | HiFiBerry DAC+ADC hw v1.2, overlay `hifiberry-dacplusadc` |
 | Carte ALSA | `sndrpihifiberry`, playback **et** capture, `card 0` |
 
@@ -158,20 +158,21 @@ Points qui en découlent :
   — les 7 dépendances s'y téléchargent. Avec `codec=pcm`, snapclient ne décode
   rien, ce qui ménage le mono-cœur. Reste le seul nœud susceptible de décrocher
   sur la synchro à 20 ms. Un Zero 2 W de rechange est disponible si besoin.
-- **Trois HAT sur quatre n'ont aucun mixer ALSA.** Pas de volume matériel : le
-  volume passe par snapcast, et en mode dmix l'atténuation logicielle serait
-  obligatoire.
-- **`bcm2835` n'est encore actif que sur `pcpDJ`** (card 0 « Headphones »).
-- `CLOSEOUT="5"` n'est posé **que sur pcpDJ**. Les trois autres ont `CLOSEOUT=""`.
-- Aucun nœud n'a de binaire snapclient installé — pcpDJ non plus, la validation
-  antérieure s'était faite dans `/tmp`.
+- **Trois HAT sur quatre n'ont aucun mixer ALSA.** Sans objet depuis que le
+  volume est retiré (`--mixer none`), mais déterminant si le mode `dmix` était un
+  jour retenu : l'atténuation logicielle y serait obligatoire.
+- **`bcm2835` n'est encore actif que sur `pcpDJ`** (card 0 « Headphones »). C'est
+  donc le seul nœud où le bug 2 se manifestait, et le bon banc d'essai.
+- `CLOSEOUT="5"` est désormais posé sur **les 4 nœuds** (`install.sh` le fait).
+- Les 4 nœuds portent le binaire snapclient 0.35.0 `bookworm` dans
+  `/mnt/mmcblk0p2/pcpNetAudio/bin/`.
 
 ---
 
-## 5. ⚠️ Sept bugs corrigés dans l'outillage — contexte indispensable
+## 5. ⚠️ Neuf bugs corrigés dans l'outillage — contexte indispensable
 
-Les scripts n'avaient jamais tourné. Sept défauts trouvés et corrigés le
-14 août ; plusieurs auraient causé des dégâts silencieux.
+Les scripts n'avaient jamais tourné. Neuf défauts trouvés et corrigés les 14 et
+15 août ; plusieurs auraient causé des dégâts silencieux.
 
 | # | Fichier | Défaut | Conséquence évitée |
 |---|---|---|---|
@@ -182,6 +183,9 @@ Les scripts n'avaient jamais tourné. Sept défauts trouvés et corrigés le
 | 5 | `deploy.sh` ×2 | idem | **seul le premier nœud déployé** |
 | 6 | `deploy.sh:35` | `MODE="${4:-dmix}"` | défaut contraire à la doc → **bit-perfect perdu** silencieusement |
 | 7 | `install.sh` ×4 | bugs 1, 2 dupliqués + `NB=$(… grep -c)` sous `set -e` (sort en 1 quand le compte est 0, **tue le script**) + `--host` déprécié | |
+
+| 8 | `install.sh` | `mkdir -p "$BIN_DIR"` sans sudo | `/mnt/mmcblk0p2` est à root:root en 0755 → **échec sur tout nœud neuf**. Invisible sur pcpDJ, où le répertoire existait déjà : `mkdir -p` y était un no-op |
+| 9 | `fleet.sh` | `nodes \| while read … done` | le tube met la boucle dans un **sous-shell** : les jobs `&` sont ses enfants, le `wait` du shell principal n'attend rien, il rend la main en **53 ms**, le `cat` lit un répertoire vide et le `rm -rf` supprime la cible pendant que les ssh tournent |
 
 `fleet.sh inventory` a en plus reçu un `timeout 30` par nœud : `ConnectTimeout`
 ne couvre que l'établissement de la connexion, pas la durée d'exécution.
@@ -249,37 +253,25 @@ est LMS.
 2. **Réservation DHCP Omada pour `.27`**, avant tout déploiement : l'IP part en
    dur dans chaque nœud.
 
-### Étape D — premier nœud, seul
-
-`install.sh` n'a **toujours jamais tourné de bout en bout**, malgré 4 correctifs.
-Le lancer sur **pcpDJ uniquement** et vérifier avant d'aller plus loin :
-
-```sh
-scp install.sh tc@192.168.1.23:/tmp/
-ssh tc@192.168.1.23 "SNAPSERVER=192.168.1.27 NODE_NAME=pcpDJ sh /tmp/install.sh"
-ssh tc@192.168.1.23 "pcpna-mode snapcast && pcpna-mode status"
-tail -f /tmp/snapclient.log        # sur le nœud
-```
-
-Attention : pcpDJ est le seul nœud où `bcm2835` est actif, donc **le seul où le
-bug de détection de carte se serait manifesté**. C'est le bon banc d'essai.
-
-### Étape E — parc, puis exploitation
-
-```sh
-DRY_RUN=1 SNAPSERVER=192.168.1.27 ./deploy.sh
-SNAPSERVER=192.168.1.27 ./deploy.sh
-./fleet.sh status
-```
-
-Surveiller `pcpBunker` en particulier (mono-cœur ARMv6).
-
-### Réglage du buffer
+### Réglage du buffer — prochaine étape
 
 `buffer` est le budget de latence **de bout en bout**, pas un tampon réseau.
-Actuellement à 1000 ms. Descendre par paliers : 300 → 200 → 150. **Ne pas partir
-de 50**, c'est irréaliste. Le parc étant entièrement filaire, il n'y a pas de
-raison de rester haut.
+Actuellement à 1000 ms, jamais ajusté. Descendre par paliers : 300 → 200 → 150.
+**Ne pas partir de 50**, c'est irréaliste. Le parc étant **entièrement filaire**
+(vérifié : les trois Zero passent par un adaptateur USB, aucun Wi-Fi), il n'y a
+aucune raison de rester haut.
+
+### Volume : décision arrêtée
+
+**Il n'y a aucun réglage de volume, et c'est délibéré.** snapclient tourne en
+`--mixer none`. Ni le volume logiciel (multiplication 16 bits) ni le volume
+matériel (atténuation 32 bits dans le DAC) ne sont bit-perfect sous 100 %. Le
+niveau se règle en **analogique**, sur les amplis de zone.
+
+Conséquence : les curseurs de l'interface snapweb (port 1780) restent affichés mais
+n'ont **aucun effet** — vérifié, une consigne à 30 % est reçue et journalisée par le
+client sans que le contrôle ALSA du DAC bouge. Ne pas rouvrir ce sujet sans élément
+nouveau : il a été implémenté, mesuré, puis retiré en connaissance de cause.
 
 ---
 

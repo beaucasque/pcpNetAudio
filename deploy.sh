@@ -36,8 +36,6 @@ while IFS= read -r line || [ -n "$line" ]; do
     # (bit-perfect preserve, cf. README "hw ou dmix"). Un defaut a dmix ferait
     # perdre silencieusement ~1,7 bit sur toute ligne de nodes.conf incomplete.
     NAME="$1"; IP="$2"; ROLE="$3"; MODE="${4:-hw}"; ATTEN="${5:-0.3}"; CARD="${6:-}"
-    # 7e colonne : mode de volume. Vide ou "-" = auto-detection par install.sh.
-    MIXER="${7:-}"; [ "$MIXER" = "-" ] && MIXER=""
 
     [ "$ROLE" = "skip" ] && { echo "-- $NAME : ignoré (skip)"; continue; }
 
@@ -50,7 +48,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     if [ -n "$DRY_RUN" ]; then
         echo "    [dry-run] scp $INSTALLER $SSH_USER@$IP:/tmp/"
-        echo "    [dry-run] SNAPSERVER=$SNAPSERVER ALSA_MODE=$MODE ATTEN=$ATTEN CARD=$CARD MIXER=$MIXER NODE_NAME=$NAME sh /tmp/install.sh"
+        echo "    [dry-run] SNAPSERVER=$SNAPSERVER ALSA_MODE=$MODE ATTEN=$ATTEN CARD=$CARD NODE_NAME=$NAME sh /tmp/install.sh"
         continue
     fi
 
@@ -65,7 +63,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     if scp -q "$INSTALLER" "$SSH_USER@$IP:/tmp/install.sh" \
        && ssh -n "$SSH_USER@$IP" \
-            "SNAPSERVER='$SNAPSERVER' ALSA_MODE='$MODE' ATTEN='$ATTEN' CARD='$CARD' MIXER='$MIXER' NODE_NAME='$NAME' sh /tmp/install.sh"
+            "SNAPSERVER='$SNAPSERVER' ALSA_MODE='$MODE' ATTEN='$ATTEN' CARD='$CARD' NODE_NAME='$NAME' sh /tmp/install.sh"
     then
         OK_COUNT=$((OK_COUNT + 1))
     else

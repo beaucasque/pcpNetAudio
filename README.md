@@ -124,35 +124,49 @@ téléphone depuis la cabine :
 sudo systemctl enable --now pcpna-web        # unité pcpna-web.service
 ```
 
-Deux fonctions, délibérément :
+Une seule fonction, délibérément : **la bascule globale** — 100 % piCorePlayer ou
+100 % Snapcast. Pas de sélecteur par zone, le projet assume un mode ou l'autre avec
+ses forces, pas un panachage. La bascule délègue à `fleet.sh`, aucune logique n'est
+dupliquée. Le reste de la page affiche l'état de chaque zone.
 
-- **bascule globale** — 100 % piCorePlayer ou 100 % Snapcast. Pas de sélecteur par
-  zone : le projet assume un mode ou l'autre avec ses forces, pas un panachage. La
-  bascule délègue à `fleet.sh`, aucune logique n'est dupliquée.
-- **volume par snapclient**, qui est le réglage réellement utilisé au quotidien.
+Aucun réglage de volume n'est exposé — voir la section suivante.
 
-## Volume et bit-perfect
+Après une bascule vers LMS, les quatre nœuds sont de nouveau visibles dans Lyrion
+**en 6 secondes**, connectés et allumés. La lecture ne reprend pas d'elle-même : il
+faut la relancer depuis Lyrion.
 
-Le volume snapclient s'applique de deux façons, réglées par nœud via la colonne
-`mixer` de `nodes.conf` :
+## Volume : il n'y en a pas, et c'est délibéré
+
+`install.sh` lance snapclient avec **`--mixer none`**. Le flux traverse le client
+sans qu'un seul échantillon soit touché. Le niveau se règle en **analogique**, sur
+les amplis de zone.
+
+La raison : snapclient sait atténuer de deux façons, et **aucune n'est bit-perfect
+sous 100 %**.
 
 | Mode | Ce qui se passe | Coût sous 100 % |
 |---|---|---|
-| `software` | snapclient multiplie des échantillons **16 bits**, le résultat est requantifié en 16 bits | −10 dB ≈ 1,7 bit perdu |
-| `hardware:<contrôle>` | les 16 bits arrivent **intacts** au DAC, qui atténue dans son chemin interne **32 bits** avant le modulateur | négligeable, mais non nul |
+| `software` | multiplication d'échantillons **16 bits**, requantifiée en 16 bits | −10 dB ≈ 1,7 bit perdu |
+| `hardware:<contrôle>` | atténuation par le DAC dans son chemin interne **32 bits** | négligeable, mais non nul |
+| **`none`** | **rien** | **aucun** |
 
-**Aucun des deux n'est bit-perfect sous 100 %.** Le seul chemin réellement
-bit-perfect est de laisser les volumes à 100 % et de régler le niveau en analogique
-sur les amplis de zone. `hardware` est un net progrès, pas une préservation.
+Le mode matériel est un net progrès sur le logiciel, pas une préservation. Puisque
+tout le reste du projet est construit pour le bit-perfect — mode ALSA `hw`, `dmix`
+écarté, `codec=pcm` — offrir un curseur reviendrait à fournir un moyen commode de
+perdre ce qu'on protège partout ailleurs.
 
-⚠ `--mixer hardware` **sans nom de contrôle** cherche un mixer appelé `PCM`, absent
-du PCM512x → erreur fatale au démarrage du client. Toujours nommer le contrôle.
-L'auto-détection d'`install.sh` écarte les contrôles à plage trop courte : sur
-HiFiBerry, `Analogue` existe mais ne compte que 2 crans (0 / −6 dB), inutilisable
-comme volume.
+**Conséquence à connaître : les curseurs de volume de l'interface web de snapserver
+(port 1780) restent affichés mais n'ont plus aucun effet.** Vérifié : une consigne à
+30 % est bien reçue par le client et journalisée, sans que le contrôle ALSA du DAC
+bouge d'un cran. `initial_volume = 100` est figé dans `snapserver.conf` pour que
+l'affichage ne suggère pas une atténuation inexistante.
 
-Sur ce parc, seul pcpDJ dispose du nécessaire (`hardware:Digital`, plage 0-207) ;
-les trois HiFiBerry DAC n'exposent aucun contrôle et restent en `software`.
+Si le besoin d'un volume logiciel réapparaissait, deux pièges sont documentés dans
+l'historique git : `--mixer hardware` **sans nom de contrôle** cherche un mixer
+appelé `PCM`, absent du PCM512x, et le client meurt sur une erreur fatale ; et sur
+HiFiBerry le contrôle `Analogue` existe mais ne compte que 2 crans (0 / −6 dB),
+inutilisable comme volume — seul `Digital` (0-207) l'est, et uniquement sur le
+DAC+ Pro.
 
 Le mode affiché est déduit des connexions snapserver plutôt que d'un `fleet.sh
 status` en SSH : un nœud rendu à LMS a coupé son snapclient, donc il apparaît

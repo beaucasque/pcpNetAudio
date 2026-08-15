@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """pcpNetAudio - console web de contrôle du parc.
 
-Deux fonctions, et rien de plus :
+Une seule fonction : la bascule GLOBALE du parc, 100 % piCorePlayer (LMS) ou
+100 % Snapcast. Pas de sélecteur par zone — le projet assume un mode ou l'autre,
+chacun avec ses forces, et pas un panachage.
 
-  - bascule GLOBALE du parc : 100 % piCorePlayer (LMS) ou 100 % Snapcast.
-    Pas de sélecteur par zone : le projet assume un mode ou l'autre, chacun
-    avec ses forces, et pas un panachage.
-  - volume par snapclient, qui est le réglage réellement utilisé au quotidien.
+Il n'y a DÉLIBÉRÉMENT aucun réglage de volume. snapclient tourne en
+"--mixer none" : le flux le traverse sans qu'un échantillon soit touché. Ni le
+volume logiciel (multiplication 16 bits) ni le volume matériel (atténuation
+32 bits dans le DAC) ne sont bit-perfect sous 100 %. Le niveau se règle en
+analogique, sur les amplis de zone. Exposer un curseur ici reviendrait à offrir
+un moyen commode de perdre ce que tout le reste du projet cherche à préserver.
 
-La bascule délègue à fleet.sh : aucune logique n'est dupliquée ici. Les volumes
-passent par le JSON-RPC de snapserver sur le port 1705.
+La bascule délègue à fleet.sh : aucune logique n'est dupliquée ici. L'état est
+lu par le JSON-RPC de snapserver sur le port 1705.
 
 Écoute sur le LAN sans authentification, et expose un point d'entrée qui lance
 fleet.sh. C'est acceptable sur un réseau domestique, mais c'est la raison pour
@@ -84,7 +88,7 @@ def noeuds_connus():
 
 
 def etat():
-    """Photo du parc : clients, volumes, et mode déduit.
+    """Photo du parc : clients déclarés, connectés ou non, et mode déduit.
 
     Le mode se déduit des connexions plutôt que d'interroger les nœuds en SSH :
     un nœud rendu à LMS a coupé son snapclient, donc il apparaît déconnecté.
@@ -104,8 +108,6 @@ def etat():
                 "id": c["id"],
                 "nom": c["config"]["name"] or c["host"]["name"],
                 "connecte": c["connected"],
-                "volume": c["config"]["volume"]["percent"],
-                "mute": c["config"]["volume"]["muted"],
             })
     clients.sort(key=lambda c: c["nom"].lower())
 
@@ -195,20 +197,6 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoi(409, json.dumps({"erreur": "bascule déjà en cours"}))
                 return self._envoi(202, json.dumps({"ok": True}))
 
-            if self.path == "/api/volume":
-                cid = corps.get("id")
-                pct = corps.get("volume")
-                mute = corps.get("mute")
-                if not isinstance(cid, str) or not cid:
-                    return self._envoi(400, json.dumps({"erreur": "id manquant"}))
-                if not isinstance(pct, int) or not 0 <= pct <= 100:
-                    return self._envoi(400, json.dumps({"erreur": "volume hors bornes"}))
-                rpc("Client.SetVolume", {
-                    "id": cid,
-                    "volume": {"percent": pct, "muted": bool(mute)},
-                })
-                return self._envoi(200, json.dumps({"ok": True}))
-
             self._envoi(404, json.dumps({"erreur": "inconnu"}))
         except Exception as exc:                       # noqa: BLE001
             self._envoi(500, json.dumps({"erreur": str(exc)}))
@@ -255,26 +243,12 @@ button.mode.actif-lms{border-color:var(--lms);background:var(--lms-doux)}
 button.mode:disabled{opacity:.5;cursor:wait}
 .msg{font-size:12px;color:var(--doux);min-height:18px;margin-bottom:18px;
   white-space:pre-wrap;font-family:ui-monospace,monospace}
-.zone{background:var(--carte);border:1px solid var(--bord);border-radius:14px;
-  padding:14px 16px;margin-bottom:10px}
-.zone.hs{opacity:.45}
-.tete{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.zone{background:var(--carte);border:1px solid var(--bord);border-radius:12px;
+  padding:13px 16px;margin-bottom:8px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px}
+.zone.hs{opacity:.5}
 .nom{font-weight:600}
-.pct{font-variant-numeric:tabular-nums;font-size:14px;color:var(--doux);
-  font-family:ui-monospace,monospace}
-.ligne{display:flex;align-items:center;gap:12px;margin-top:10px}
-input[type=range]{flex:1;appearance:none;height:28px;background:transparent;cursor:pointer}
-input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--bord)}
-input[type=range]::-webkit-slider-thumb{appearance:none;width:24px;height:24px;border-radius:50%;
-  background:var(--curseur);margin-top:-9px;border:3px solid var(--carte);
-  box-shadow:0 1px 4px #0004}
-input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--bord)}
-input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
-  background:var(--curseur);border:3px solid var(--carte)}
-input[type=range]:disabled{opacity:.4}
-button.mute{appearance:none;border:1px solid var(--bord);background:transparent;
-  color:var(--doux);border-radius:9px;width:42px;height:34px;cursor:pointer;font-size:16px}
-button.mute.on{background:var(--texte);color:var(--fond);border-color:var(--texte)}
+.etat{font-size:13px;color:var(--doux)}
 .note{font-size:12px;color:var(--doux);margin-top:18px;padding-top:14px;
   border-top:1px solid var(--bord)}
 </style>
@@ -293,13 +267,11 @@ button.mute.on{background:var(--texte);color:var(--fond);border-color:var(--text
 
 <div id="zones"></div>
 
-<div class="note">Le volume est appliqué par snapclient, en logiciel.
-À 100 % le flux est inchangé, donc bit-perfect.</div>
+<div class="note">Pas de réglage de volume : snapclient tourne en
+<code>--mixer none</code>, le flux le traverse sans qu'un échantillon soit touché.
+Le niveau se règle en analogique, sur les amplis de zone.</div>
 
 <script>
-let glisse = null;          // id du client en cours de réglage : on ne l'écrase pas
-let attente = new Map();    // id -> timer d'anti-rebond
-
 async function charger(){
   let e;
   try { e = await (await fetch('/api/etat')).json(); }
@@ -322,37 +294,15 @@ async function charger(){
     if (!d){
       d = document.createElement('div');
       d.id = 'z-'+c.id;
-      d.innerHTML =
-        '<div class="tete"><span class="nom"></span><span class="pct"></span></div>' +
-        '<div class="ligne">' +
-          '<button class="mute">◼</button>' +
-          '<input type="range" min="0" max="100" step="1">' +
-        '</div>';
-      const r = d.querySelector('input'), m = d.querySelector('button');
-      r.oninput = () => { glisse = c.id; d.querySelector('.pct').textContent = r.value+' %'; };
-      r.onchange = () => { glisse = null; pousser(c.id, +r.value, m.classList.contains('on')); };
-      m.onclick = () => { const on = !m.classList.contains('on');
-                          m.classList.toggle('on', on); pousser(c.id, +r.value, on); };
+      d.innerHTML = '<span class="nom"></span><span class="etat"></span>';
       hote.appendChild(d);
     }
     d.className = 'zone' + (c.connecte ? '' : ' hs');
-    d.querySelector('.nom').textContent = c.nom + (c.connecte ? '' : '  — hors ligne');
-    const r = d.querySelector('input'), m = d.querySelector('button');
-    r.disabled = !c.connecte;
-    if (glisse !== c.id){
-      r.value = c.volume;
-      d.querySelector('.pct').textContent = c.volume + ' %';
-      m.classList.toggle('on', c.mute);
-    }
+    d.querySelector('.nom').textContent = c.nom;
+    d.querySelector('.etat').innerHTML =
+      c.connecte ? '<span class="pastille on"></span>sur le flux'
+                 : '<span class="pastille"></span>rendu à LMS';
   }
-}
-
-function pousser(id, volume, mute){
-  clearTimeout(attente.get(id));
-  attente.set(id, setTimeout(() => {
-    fetch('/api/volume', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({id, volume, mute})});
-  }, 120));                        // anti-rebond : un glissement = une requête
 }
 
 async function mode(m){
