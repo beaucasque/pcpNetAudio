@@ -300,7 +300,33 @@ Le seul cavalier de la carte, `J1`, offre 0 / 12 / 32 dB, mais le 12 dB laissera
 | Mac → **sortie casque** | curseur macOS, qui redevient actif |
 | Table de mixage → sortie ligne | la table |
 
-Viser des crêtes autour de **−8 à −10 dBFS**. Pour mesurer, il faut libérer la carte,
+Viser des crêtes autour de **−8 à −10 dBFS**.
+
+### Mesures de référence
+
+À conserver pour évaluer tout changement de source. Plancher de bruit relevé
+entrée silencieuse, signal relevé sur du podcast :
+
+| Source | plancher | signal RMS | crête | S/B |
+|---|---|---|---|---|
+| ADC seul, entrée débranchée | **−93,0 dBFS** | — | — | — |
+| Mac → HDMI → écran, volume écran bas | −87,2 dBFS | −43,2 dBFS | −22,6 dBFS | 44 dB |
+| Mac mini, sortie casque au maximum | −87,6 dBFS | **−17,1 dBFS** | **−5,8 dBFS** | **70,5 dB** |
+
+Deux enseignements. **Les deux amplis casque se valent** — 0,4 dB d'écart, dans le
+bruit de mesure — et tous deux se situent ~5,5 dB au-dessus du plancher de l'ADC :
+c'est la source qui limite, jamais le convertisseur. Et **26 dB de rapport
+signal/bruit ont été gagnés par le seul réglage de niveau**, sans changer un câble.
+
+Le plafond de la chaîne est le plancher de l'ADC, soit ~76 dB de S/B au même niveau
+de signal. Les 5,5 dB manquants appartiennent à l'ampli casque : c'est ce qu'une
+vraie sortie ligne viendra chercher.
+
+**Vérifier le facteur de crête, pas seulement le niveau.** Un ampli poussé au
+maximum qui saturerait raboterait les transitoires et rapprocherait la crête du RMS.
+Mesuré ici à **11,4 dB**, la dynamique est intacte : la sortie tient son maximum
+proprement. Un facteur sous ~8 dB sur du matériel normal doit faire redescendre d'un
+cran. Pour mesurer, il faut libérer la carte,
 que snapserver tient en exclusif :
 
 ```sh
