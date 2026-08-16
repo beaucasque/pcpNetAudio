@@ -81,7 +81,7 @@ Formats acceptés : **44,1 → 192 kHz, 16/24/32 bits**.
 
 ```
 source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true\
-         &silence_threshold_percent=0.1&idle_threshold=3000
+         &silence_threshold_percent=0.1&idle_threshold=15000
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
 codec = pcm

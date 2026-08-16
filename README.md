@@ -198,7 +198,7 @@ faut la relancer depuis Lyrion.
 snapserver lit la carte **directement** :
 
 ```
-source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true&silence_threshold_percent=0.1&idle_threshold=3000
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true&silence_threshold_percent=0.1&idle_threshold=15000
 ```
 
 **`send_silence=true` n'est pas optionnel ici.** Par défaut, quand le flux passe en
@@ -224,8 +224,15 @@ le débit d'octets, pas la présence de signal.
 
 `alsa://` expose `silence_threshold_percent`, que `pipe://` n'a pas.
 
-**Le seuil doit être calé sur la source branchée et silencieuse, pas sur l'entrée
-débranchée.** Erreur commise ici : réglé à 0,01 % (−80 dBFS) d'après le plancher de
+`idle_threshold` vaut **15 000 ms** et non les 3 000 du début : trois secondes de
+passage calme — ou une simple pause — suffisaient à faire basculer l'état, puis à le
+faire revenir. Ce clignotement produisait des `onResync` de plusieurs centaines de
+millisecondes et un XRUN simultané sur toutes les zones. Avec `send_silence=true` le
+flux continue de toute façon pendant l'idle : allonger le seuil ne coûte qu'un
+affichage moins réactif.
+
+**Le seuil de niveau doit être calé sur la source branchée et silencieuse, pas sur
+l'entrée débranchée.** Erreur commise ici : réglé à 0,01 % (−80 dBFS) d'après le plancher de
 l'ADC seul (−93 dBFS), il laissait le flux éternellement `playing` dès qu'une source
 était connectée — un téléphone en pause souffle à −68,7 dBFS, soit trois fois
 au-dessus. Mesures sur ce parc :
@@ -279,6 +286,28 @@ Mesurer sans écarter la phase de mise en route fait imputer au réglage ce qui
 n'appartient qu'au démarrage — sur une épreuve de 3 minutes, 2 à 3 anomalies par
 nœud toutes groupées dans les 6 premières secondes. Purger les journaux **30 s
 après** le démarrage avant toute mesure de régime permanent.
+
+## Niveau d'entrée : où se règle-t-il
+
+**L'ADC n'expose aucun gain** — pas un contrôle `Capture`, `PGA` ou `ADC` dans ALSA.
+Le seul cavalier de la carte, `J1`, offre 0 / 12 / 32 dB, mais le 12 dB laisserait
+2 dB de marge à un niveau nominal : inexploitable. Le niveau se règle donc
+**entièrement à la source**, et l'endroit dépend de la sortie utilisée :
+
+| Source | Où régler |
+|---|---|
+| Mac → **HDMI** → écran → jack de l'écran | **menu OSD de l'écran** — le curseur macOS est grisé, macOS ne contrôle pas le volume HDMI |
+| Mac → **sortie casque** | curseur macOS, qui redevient actif |
+| Table de mixage → sortie ligne | la table |
+
+Viser des crêtes autour de **−8 à −10 dBFS**. Pour mesurer, il faut libérer la carte,
+que snapserver tient en exclusif :
+
+```sh
+sudo systemctl stop snapserver
+arecord -D hw:CARD=sndrpihifiberry -f S16_LE -r 48000 -c 2 -t raw -d 8 /tmp/n.raw
+sudo systemctl start snapserver
+```
 
 ## Latence
 
