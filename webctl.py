@@ -25,6 +25,7 @@ interpolé dans un shell.
 
 import json
 import socket
+import time
 import subprocess
 import sys
 import threading
@@ -39,7 +40,7 @@ FLEET = REPO / "fleet.sh"
 # Une seule bascule à la fois : fleet.sh met ~4 s et deux exécutions
 # concurrentes se marcheraient dessus sur les mêmes nœuds.
 _switch_lock = threading.Lock()
-_last_switch = {"running": False, "result": ""}
+_last_switch = {"running": False, "result": "", "fin": 0.0}
 
 
 def rpc(method, params=None):
@@ -128,7 +129,12 @@ def etat():
         "flux": flux.get("id", "?"),
         "flux_etat": flux.get("status", "?"),
         "bascule_en_cours": _last_switch["running"],
-        "bascule_resultat": _last_switch["result"],
+        # Le resultat d'une bascule est une information TRANSITOIRE. L'afficher
+        # indefiniment la presente comme actuelle : apres l'ajout d'un noeud, la
+        # console montrait encore le compte-rendu d'une bascule anterieure, donc
+        # un nœud de moins que la realite. On l'oublie au bout de 30 s.
+        "bascule_resultat": (_last_switch["result"]
+                             if time.time() - _last_switch["fin"] < 30 else ""),
     }
 
 
@@ -150,6 +156,7 @@ def basculer(mode):
         except Exception as exc:                       # noqa: BLE001
             _last_switch["result"] = f"erreur : {exc}"
         finally:
+            _last_switch["fin"] = time.time()
             _last_switch["running"] = False
             _switch_lock.release()
 

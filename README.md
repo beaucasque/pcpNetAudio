@@ -167,9 +167,25 @@ données.** `arecord` numérise en permanence le plancher de bruit de l'ADC, don
 flux restait éternellement `playing`, même entrée débranchée. L'indicateur mesurait
 le débit d'octets, pas la présence de signal.
 
-`alsa://` expose `silence_threshold_percent`, que `pipe://` n'a pas. À 0,01 %
-(≈ −80 dBFS), le plancher de bruit mesuré de l'ADC (−93 dBFS) passe sous le seuil :
-le flux bascule en `idle`, et `playing` signifie enfin qu'il y a du son.
+`alsa://` expose `silence_threshold_percent`, que `pipe://` n'a pas.
+
+**Le seuil doit être calé sur la source branchée et silencieuse, pas sur l'entrée
+débranchée.** Erreur commise ici : réglé à 0,01 % (−80 dBFS) d'après le plancher de
+l'ADC seul (−93 dBFS), il laissait le flux éternellement `playing` dès qu'une source
+était connectée — un téléphone en pause souffle à −68,7 dBFS, soit trois fois
+au-dessus. Mesures sur ce parc :
+
+| | crête | % pleine échelle |
+|---|---|---|
+| entrée débranchée | −93 dBFS | 0,0022 % |
+| source branchée, en pause | −68,7 dBFS | 0,037 % |
+| **seuil retenu** | **−60 dBFS** | **0,1 %** |
+| musique, RMS | −33,4 dBFS | 2,1 % |
+| musique, crête | −14,2 dBFS | 19,5 % |
+
+L'écart entre le souffle d'une source au repos et de la musique réelle est de trois
+ordres de grandeur : le seuil est donc peu critique, tant qu'il est calé sur une
+mesure et non sur une hypothèse.
 
 Bénéfice secondaire : un étage de moins dans la chaîne, et plus de processus
 `arecord`.
