@@ -376,6 +376,24 @@ nouveau : il a été implémenté, mesuré, puis retiré en connaissance de caus
 ---
 
 ## 10. Pièges connus
+**`busybox cp` applique les droits de la SOURCE à la destination**, même si celle-ci
+existe déjà — contrairement à GNU `cp`, qui conserve ceux de la cible. Poser un
+fichier de démarrage avec `cp` depuis un temporaire créé par redirection (donc 644
+sous umask 022) lui retire son bit d'exécution.
+
+Conséquence vécue sur trois nœuds : `/opt/bootlocal.sh` en 644 n'est pas exécuté,
+donc `pcp_startup.sh` n'est jamais lancé, donc **ni sshd, ni serveur web, ni
+squeezelite**. Le nœud répond au ping et à rien d'autre : il paraît mort alors qu'il
+a parfaitement démarré — console accessible, toutes les extensions montées.
+
+**Signe distinctif : `/var/log/pcp_boot.log` absent**, alors qu'il fait ~36 lignes sur
+un nœud sain. C'est le premier fichier à vérifier devant ce symptôme.
+
+Le remède est `sudo chmod +x /opt/bootlocal.sh` puis `filetool.sh -b`. Les trois
+nœuds ont été réinstallés faute d'avoir trouvé la cause à temps.
+
+`sed -i` est hors de cause : testé sous busybox, il préserve les droits.
+
 
 **`/tmp` est en tmpfs sur pCP, et c'est la RACINE du système** — 385 Mo partagés
 avec la RAM sur les nœuds à 427 Mo. Un `/` plein est une panne franche.

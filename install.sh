@@ -380,36 +380,51 @@ chmod +x "$BIN_DIR/pcpna-mode"
 # fleet.sh appelle pcpna-mode par son chemin absolu sur ext4. Le symlink ne sert
 # qu'a la frappe manuelle sur un noeud. Rien ne casse s'il est absent.
 #
-# REGLE : NE RIEN INSERER AVANT pcp_startup.sh DANS bootlocal.sh. Ce qui s'y
-# execute conditionne tout le demarrage du noeud, et le gain -- poser un symlink
-# quelques secondes plus tot -- ne justifie aucun risque de ce cote.
+# CAUSE ETABLIE, apres deux attributions erronees. A lire avant de toucher
+# quoi que ce soit dans /opt/bootlocal.sh.
 #
-# HISTOIRE, et sa correction. Sur l'ancienne installation de pcpBunker, la ligne
-# placee en FIN de bootlocal.sh n'etait jamais atteinte : le pipeline
-# "pcp_startup.sh | tee" ne rendait pas la main sur ce noeud. Je l'ai alors
-# deplacee AVANT pcp_startup.sh, et le noeud n'a plus demarre -- ping seulement,
-# ni SSH ni serveur web. J'en ai conclu, et ecrit ici meme, que ma ligne etait la
-# cause. C'ETAIT FAUX, et trois faits l'ont demontre ensuite :
+# Symptome : le noeud repond au ping et RIEN d'autre -- ni SSH, ni serveur web,
+# ni squeezelite. Il parait mort. En realite il a parfaitement demarre : console
+# accessible, toutes les extensions montees, reseau leve par dhcpcd.
 #
-#   - pcpDJ est tombe avec le meme symptome alors que son bootlocal.sh etait
-#     verifie propre, en-tete et mydata.tgz compris ;
-#   - "norestore" n'a pas recupere pcpBunker, alors qu'il court-circuite
-#     precisement la restauration de bootlocal.sh ;
-#   - pcpBunker reinstalle et pcpSystem redemarrent aujourd'hui avec cette ligne
-#     en place, en 50 s et 26 s.
+# Cause : /opt/bootlocal.sh n'etait plus EXECUTABLE. Il n'est donc pas execute,
+# donc "pcp_startup.sh" n'est jamais lance -- et c'est lui qui demarre sshd, le
+# serveur web et squeezelite. Signe distinctif : /var/log/pcp_boot.log ABSENT,
+# alors qu'il fait ~36 lignes sur un noeud sain.
 #
-# Le facteur commun aux deux pannes est l'ANCIENNETE des installations, pas ce
-# code. Cause reelle toujours inconnue : "norestore" ne l'ecarte pas, donc elle
-# se situe avant la restauration -- chargement des extensions depuis p2, ou p2
-# elle-meme. Seule une console HDMI sur un noeud en panne trancherait.
+# Coupable : "cp". BUSYBOX CP APPLIQUE LES DROITS DE LA SOURCE a la destination,
+# meme si celle-ci existe deja -- contrairement a GNU cp qui conserve ceux de la
+# cible. Une version anterieure reecrivait bootlocal.sh via un fichier temporaire
+# cree par redirection, donc 644 sous umask 022, puis le posait avec "sudo cp".
+# Le 644 passait tel quel. Verifie explicitement sur un noeud :
+#     cible avant 755, source 644, apres cp -> 644.
 #
-# La pose du lien reste en fin de fichier et purement optionnelle : fleet.sh
-# appelle pcpna-mode par son chemin absolu, donc rien ne casse si elle echoue.
+# "sed -i" est HORS DE CAUSE : teste sous busybox, il preserve les droits.
+#
+# Trois noeuds ont ete reinstalles avant que la cause soit trouvee. Un
+# "chmod +x /opt/bootlocal.sh" suffisait. pcpLobby a survecu uniquement parce
+# que son deploiement avait echoue sur un timeout GitHub AVANT d'atteindre ce cp.
+#
+# D'ou le chmod defensif plus bas, et la regle : ne jamais poser un fichier de
+# demarrage avec cp sous busybox. Utiliser tee -a, ou reaffirmer les droits.
 BOOT_MARK="pcpna-mode /usr/local/bin"
 BOOT_LINE="[ -x $BIN_DIR/pcpna-mode ] && ln -sf $BIN_DIR/pcpna-mode /usr/local/bin/pcpna-mode"
 
 sudo sed -i "\\|$BOOT_MARK|d" /opt/bootlocal.sh 2>/dev/null || true
 echo "$BOOT_LINE" | sudo tee -a /opt/bootlocal.sh >/dev/null
+
+# CEINTURE ET BRETELLES : on reaffirme le bit d'execution.
+#
+# Un /opt/bootlocal.sh non executable ne s'execute pas, donc pcp_startup.sh
+# n'est jamais lance, donc NI sshd NI le serveur web NI squeezelite ne
+# demarrent. Le noeud repond au ping et rien d'autre : il parait mort alors
+# qu'il a parfaitement demarre. Trois noeuds ont ete reinstalles pour ca.
+#
+# "sed -i" preserve bien les droits sous busybox (verifie). Le coupable etait
+# "cp" : BUSYBOX CP APPLIQUE LES DROITS DE LA SOURCE, meme si la destination
+# existe -- contrairement a GNU cp. Un fichier temporaire cree par redirection
+# vaut 644 sous umask 022, et cp le transmettait tel quel a bootlocal.sh.
+sudo chmod +x /opt/bootlocal.sh
 log "symlink pcpna-mode : ligne ajoutée en FIN de bootlocal.sh (optionnelle)"
 
 # Pose immediate, qui elle est certaine.
