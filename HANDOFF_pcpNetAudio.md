@@ -477,6 +477,70 @@ c'est l'argument pour l'extraction de `.deb` plutôt que la compilation.
 
 ---
 
+## 11 bis. Piste future : source TCP depuis une machine numérique
+
+**Essayée le 16 août, retirée. À reprendre autrement, pas telle quelle.**
+
+snapserver accepte une source `tcp://<ip>:<port>?name=<nom>&mode=server` : il
+écoute, et une machine distante pousse du PCM brut. Pour une source **déjà
+numérique** — un Mac, un lecteur réseau — cela supprimerait tout l'étage
+analogique : ni HDMI, ni ampli casque d'écran, ni convertisseur. Donc ni leur
+bruit, ni la dérive d'horloge de l'ADC.
+
+### Ce qui a été fait
+
+```
+source = tcp://0.0.0.0:4953?name=mac&mode=server&sampleformat=48000:16:2&codec=pcm
+```
+
+Côté Mac : BlackHole 2ch comme périphérique virtuel, puis
+
+```sh
+ffmpeg -f avfoundation -i ":0" -ar 48000 -ac 2 -f s16le -flush_packets 1 -fflags nobuffer - \
+  | nc 192.168.1.27 4953
+```
+
+Le Mac se connecte, les données arrivent, le flux apparaît. **Mais le son
+glitche**, sur le Mac lui-même comme dans les zones.
+
+### Pourquoi ça a échoué — mesuré
+
+| | flux `live` (alsa) | flux `mac` (tcp) |
+|---|---|---|
+| resync sur 30 s | **0** | **133** |
+| débit reçu | — | **170 985 o/s** |
+| débit attendu | — | 192 000 o/s |
+
+**89,1 % du débit nécessaire, soit 394 secondes d'audio manquant par heure.**
+Ce n'est pas de la gigue, c'est une famine : snapserver est à court en
+permanence et corrige sans arrêt.
+
+Le chiffre écarte l'explication évidente — un BlackHole resté à 44,1 kHz
+donnerait 91,9 %, pas 89,1. Et l'utilisateur entendait déjà des décrochages
+**sur le Mac**, avant le réseau. La cause est donc en amont, très probablement
+le *périphérique de sortie multiple* de macOS, qui fait cohabiter deux horloges
+CoreAudio indépendantes et les laisse dériver.
+
+### Si on reprend un jour
+
+- **Le correctif est côté Mac**, pas côté snapcast : démêler BlackHole et
+  l'horloge CoreAudio, ou se passer du périphérique de sortie multiple.
+- **Cadencer l'envoi.** `ffmpeg | nc` vide son tampon au rythme du tube, sans
+  notion de temps réel. Un limiteur de débit (`pv -L 192000`) ou un outil
+  poussant du PCM à cadence fixe serait à essayer.
+- **Le gain resterait à démontrer.** L'horloge audio du Mac et celle du Pi
+  dériveraient l'une contre l'autre, exactement comme le quartz de l'ADC
+  aujourd'hui. On déplacerait le problème plutôt que de le supprimer, au prix de
+  deux logiciels et d'un pilote noyau côté Mac.
+
+**Le chemin analogique reste meilleur en l'état** : 0 resync, et un seul
+décrochage de 30 ms par heure. Le vrai gain de qualité viendra de la table de
+mixage et de sa sortie ligne, qui supprimera l'ampli casque de l'écran — le
+maillon qui fixe aujourd'hui le plancher de bruit à −87 dBFS au lieu des −93
+dont l'ADC est capable.
+
+---
+
 ## 12. Options écartées
 
 Ne pas rouvrir sans élément nouveau.

@@ -517,11 +517,22 @@ Trois causes de bugs silencieux, toutes rencontrées en vrai dans ce dépôt :
   tous les nœuds. Ne jamais faire dépendre le fonctionnement de ce qui suit — `fleet.sh`
   appelle donc `pcpna-mode` par son **chemin absolu** sur ext4, et le symlink dans
   `/usr/local/bin` n'est qu'un confort.
-- **`pgrep -f` / `pkill -f` matchent la ligne de commande entière — Y COMPRIS CELLE
-  DE L'APPELANT.** Un `pkill -f mon-script.sh` lancé depuis un shell dont la ligne de
-  commande contient ce nom **tue ce shell**. Vécu deux fois : d'abord sur les nœuds,
-  puis sur le serveur en tuant ma propre session. Identifier par `/proc/<pid>/exe`, ou
-  tuer par PID obtenu séparément.
+- **`pgrep -f` / `pkill -f` / `ps | grep` matchent la ligne de commande entière — Y
+  COMPRIS CELLE DE L'APPELANT.** Un `pkill -f mon-script.sh`, ou même un
+  `ps | grep '[m]on-script.sh'`, lancé depuis un shell dont la ligne de commande
+  contient ce motif, **désigne ce shell**. L'astuce du crochet ne protège que du grep
+  lui-même, pas du shell qui l'invoque. Vécu **trois fois** dans ce projet : sur les
+  nœuds via `pcpna-mode`, puis deux fois sur le serveur — dont une où le « doublon »
+  tué était la vraie surveillance et le « survivant » ma propre session.
+
+  L'identification fiable compare la cmdline **exactement** :
+
+  ```python
+  argv = (pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().decode().split('\0')[:-1])
+  if len(argv) == 2 and argv[1] == CHEMIN_DU_SCRIPT:   # pas un shell en -c
+  ```
+
+  Pour un binaire, `/proc/<pid>/exe` suffit — c'est ce qu'utilise `pcpna-mode`.
 - **`pgrep -f` / `pkill -f` sur un chemin matchent la ligne de commande entière** :
   tout processus qui *mentionne* le chemin est compté, y compris un shell de
   diagnostic. Un `status` peut mentir, et un `pkill -f` **tuer un innocent**.
