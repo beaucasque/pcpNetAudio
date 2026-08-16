@@ -79,7 +79,7 @@ Formats acceptés : **44,1 → 192 kHz, 16/24/32 bits**.
 `/etc/snapserver.conf` (sauvegarde `.bak-pcpna`) :
 
 ```
-source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry\
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true\
          &silence_threshold_percent=0.01&idle_threshold=3000
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
@@ -102,6 +102,14 @@ snapclient tcp://192.168.1.27:1704 --hostID <nom> \
 directement via sa source `alsa://`, ce qui supprime un étage et — surtout — permet
 la détection de silence : `pipe://` ne sait pas distinguer le silence de l'absence
 de données, donc le flux restait `playing` même entrée débranchée.
+
+⚠ **`send_silence=true` est indispensable.** Sans lui, snapserver cesse d'émettre
+dès que le flux passe en `idle` : les tampons ALSA des clients se vident et la
+reprise produit un XRUN **simultané sur toutes les zones** — mesuré, 1 par nœud à
+260 ms près, à chaque transition `idle → playing`. Un blanc de 3 s entre deux
+morceaux ferait donc cliquer toute la maison. Avec l'option, les clients restent
+amorcés et l'indicateur reste juste : détection de silence et émission sont
+distinctes.
 
 Deux conséquences à ne pas oublier :
 

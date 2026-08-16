@@ -380,16 +380,31 @@ chmod +x "$BIN_DIR/pcpna-mode"
 # fleet.sh appelle pcpna-mode par son chemin absolu sur ext4. Le symlink ne sert
 # qu'a la frappe manuelle sur un noeud. Rien ne casse s'il est absent.
 #
-# HISTOIRE, a ne pas repeter : une version anterieure ajoutait la pose du lien a
-# la FIN de bootlocal.sh. Sur pcpBunker (Zero W, armv6) la ligne n'etait jamais
-# atteinte -- bootlocal.sh appelle "pcp_startup.sh | tee", et ce pipeline ne
-# rendait pas la main sur ce noeud. J'ai alors deplace la ligne AVANT
-# pcp_startup.sh : le noeud n'a plus demarre du tout. Ni SSH ni serveur web,
-# seulement le ping. Recuperation par carte SD et "norestore" dans cmdline.txt.
+# REGLE : NE RIEN INSERER AVANT pcp_startup.sh DANS bootlocal.sh. Ce qui s'y
+# execute conditionne tout le demarrage du noeud, et le gain -- poser un symlink
+# quelques secondes plus tot -- ne justifie aucun risque de ce cote.
 #
-# Lecon : NE RIEN INSERER AVANT pcp_startup.sh DANS bootlocal.sh. La pose du lien
-# est desormais ajoutee en fin de fichier et purement optionnelle -- si elle n'est
-# jamais atteinte, le parc fonctionne quand meme.
+# HISTOIRE, et sa correction. Sur l'ancienne installation de pcpBunker, la ligne
+# placee en FIN de bootlocal.sh n'etait jamais atteinte : le pipeline
+# "pcp_startup.sh | tee" ne rendait pas la main sur ce noeud. Je l'ai alors
+# deplacee AVANT pcp_startup.sh, et le noeud n'a plus demarre -- ping seulement,
+# ni SSH ni serveur web. J'en ai conclu, et ecrit ici meme, que ma ligne etait la
+# cause. C'ETAIT FAUX, et trois faits l'ont demontre ensuite :
+#
+#   - pcpDJ est tombe avec le meme symptome alors que son bootlocal.sh etait
+#     verifie propre, en-tete et mydata.tgz compris ;
+#   - "norestore" n'a pas recupere pcpBunker, alors qu'il court-circuite
+#     precisement la restauration de bootlocal.sh ;
+#   - pcpBunker reinstalle et pcpSystem redemarrent aujourd'hui avec cette ligne
+#     en place, en 50 s et 26 s.
+#
+# Le facteur commun aux deux pannes est l'ANCIENNETE des installations, pas ce
+# code. Cause reelle toujours inconnue : "norestore" ne l'ecarte pas, donc elle
+# se situe avant la restauration -- chargement des extensions depuis p2, ou p2
+# elle-meme. Seule une console HDMI sur un noeud en panne trancherait.
+#
+# La pose du lien reste en fin de fichier et purement optionnelle : fleet.sh
+# appelle pcpna-mode par son chemin absolu, donc rien ne casse si elle echoue.
 BOOT_MARK="pcpna-mode /usr/local/bin"
 BOOT_LINE="[ -x $BIN_DIR/pcpna-mode ] && ln -sf $BIN_DIR/pcpna-mode /usr/local/bin/pcpna-mode"
 

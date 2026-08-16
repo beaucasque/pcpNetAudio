@@ -143,8 +143,22 @@ faut la relancer depuis Lyrion.
 snapserver lit la carte **directement** :
 
 ```
-source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&silence_threshold_percent=0.01&idle_threshold=3000
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true&silence_threshold_percent=0.01&idle_threshold=3000
 ```
+
+**`send_silence=true` n'est pas optionnel ici.** Par défaut, quand le flux passe en
+`idle`, snapserver **cesse d'émettre** : les tampons ALSA des clients se vident, et
+la reprise est une discontinuité — un XRUN simultané sur **toutes** les zones, donc
+un clic audible. Mesuré : à chaque transition `idle → playing`, 1 XRUN sur chacun
+des 5 nœuds, à 260 ms près.
+
+Pour un usage DJ c'est rédhibitoire : le moindre blanc de plus de 3 secondes entre
+deux morceaux ferait cliquer toute la maison à la reprise.
+
+Avec `send_silence=true`, snapserver continue d'envoyer du silence pendant l'idle.
+Les clients restent amorcés, la reprise est transparente, et **l'indicateur reste
+juste** — détection de silence et émission sont deux mécanismes distincts. Coût :
+1,4 Mbit/s en continu, négligeable sur un réseau filaire.
 
 L'approche initiale passait par `arecord -t raw` vers un FIFO, alimentant une source
 `pipe://`. Elle fonctionne — `pcpna-capture.service` est conservé en repli — mais
