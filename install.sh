@@ -443,6 +443,50 @@ fi
 log "sauvegarde"
 filetool.sh -b >/dev/null
 
+# ---------------------------------------------------------------- vérification
+# install.sh constate desormais l'etat qu'il laisse, au lieu de rendre la main
+# en supposant que tout s'est bien passe.
+#
+# POURQUOI. Une version anterieure retirait le bit d'execution de
+# /opt/bootlocal.sh (via busybox cp, cf. plus haut). Le script ne s'executait
+# plus, donc pcp_startup.sh non plus, donc ni sshd ni serveur web ni squeezelite.
+# Le noeud repondait au ping et a rien d'autre -- et le defaut ne se revelait
+# qu'au REBOOT SUIVANT, parfois des jours plus tard, sur une machine devenue
+# inaccessible a distance. Trois noeuds ont ete reinstalles avant qu'on trouve.
+#
+# Un simple "[ -x /opt/bootlocal.sh ]" ici aurait arrete le premier deploiement
+# avec un message clair. Une verification ne casse rien : elle constate.
+
+log "vérification"
+PROBLEMES=""
+verif() {   # verif <libelle> <commande...>
+    _lib="$1"; shift
+    printf '  %-34s ' "$_lib"
+    if "$@" >/dev/null 2>&1; then echo "ok"
+    else echo "ÉCHEC"; PROBLEMES="$PROBLEMES\n    - $_lib"; fi
+}
+
+verif "bootlocal.sh exécutable"      test -x /opt/bootlocal.sh
+verif "bootlocal.sh lance pcp_startup" grep -q "pcp_startup.sh" /opt/bootlocal.sh
+verif "binaire snapclient exécutable" test -x "$BIN_DIR/snapclient"
+verif "snapclient répond --version"   "$BIN_DIR/snapclient" --version
+verif "startup.sh exécutable"        test -x "$BIN_DIR/startup.sh"
+# Le heredoc qui genere startup.sh n'est pas quote : un $ mal echappe y serait
+# evalue a la generation. La boucle de nettoyage s'ecrivait [ "" = "<chemin>" ],
+# donc ne tuait jamais l'ancien client. On verifie que le texte est bien LITTERAL.
+verif "startup.sh non pré-évalué"    grep -qF '$(readlink' "$BIN_DIR/startup.sh"
+verif "pcpna-mode exécutable"        test -x "$BIN_DIR/pcpna-mode"
+verif "pcpna-mode répond"            sh "$BIN_DIR/pcpna-mode" status
+[ "$ALSA_MODE" = "hw" ] && verif "CLOSEOUT positionné" grep -q '^CLOSEOUT="[0-9]' "$PCP_CFG"
+# Ce qui sera RESTAURE au prochain boot compte autant que l'etat courant.
+verif "sauvegarde contient bootlocal" sh -c "sudo tar tzvf /mnt/mmcblk0p2/tce/mydata.tgz 2>/dev/null | grep -q 'rwx.*opt/bootlocal.sh'"
+
+if [ -n "$PROBLEMES" ]; then
+    printf '\n[pcpNetAudio] ERREUR: le nœud N EST PAS dans un état sain :'
+    printf '%b\n\n' "$PROBLEMES"
+    die "vérification échouée - ne pas redémarrer ce nœud avant correction"
+fi
+
 # ---------------------------------------------------------------- résumé
 
 cat <<EOF

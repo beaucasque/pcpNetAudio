@@ -5,7 +5,8 @@
 #
 #   ./fleet.sh inventory         # reconnaissance matérielle de tout le parc
 #   ./fleet.sh inventory --conf  # lignes prêtes à coller dans nodes.conf
-#   ./fleet.sh status            # état de chaque nœud
+#   ./fleet.sh status            # état de chaque nœud (snapcast | lms)
+#   ./fleet.sh health            # diagnostic complet, reconnaît les pannes connues
 #   ./fleet.sh snapcast          # bascule le parc vers snapclient
 #   ./fleet.sh lms               # rend la carte à squeezelite
 #   ./fleet.sh snapcast pcpDJ    # un nœud nommé
@@ -37,8 +38,8 @@ TARGETS="$*"
 [ -f "$CONF" ] || { echo "ERREUR: $CONF introuvable" >&2; exit 1; }
 
 case "$ACTION" in
-    snapcast|lms|status|log|inventory) ;;
-    *) echo "Usage: $0 [inventory|status|snapcast|lms|log] [--conf] [nœud...]" >&2
+    snapcast|lms|status|log|inventory|health) ;;
+    *) echo "Usage: $0 [inventory|status|health|snapcast|lms|log] [--conf] [nœud...]" >&2
        exit 1 ;;
 esac
 
@@ -79,6 +80,87 @@ if [ "$ACTION" = "inventory" ]; then
         timeout 30 ssh -n $SSH_OPTS "$SSH_USER@$ip" "sh /tmp/probe.sh $CONF_FLAG" 2>/dev/null \
             || echo "  ($name : pas de reponse en 30 s)"
         [ -z "$CONF_FLAG" ] && echo ""
+    done
+    exit 0
+fi
+
+# ---------------------------------------------------------------- health
+#
+# Reconnait la panne qui a coute trois reinstallations : /opt/bootlocal.sh non
+# executable. Le noeud repond alors au ping et A RIEN D AUTRE -- pcp_startup.sh
+# n'est jamais lance, donc ni sshd, ni serveur web, ni squeezelite. Il parait
+# mort alors qu'il a parfaitement demarre.
+#
+# Signature : ping OK + port 22 ferme. Le remede tient en une commande, mais il
+# faut un clavier et un ecran sur le noeud puisque SSH est justement ce qui
+# manque. D'ou l'interet de le diagnostiquer d'ici plutot que sur place.
+
+if [ "$ACTION" = "health" ]; then
+    ALERTES=0
+    nodes | while read -r name ip; do
+        printf '%-12s ' "$name"
+
+        if ! ping -c1 -W2 "$ip" >/dev/null 2>&1; then
+            echo "HORS LIGNE (pas de ping) - alimentation ou reseau"
+            continue
+        fi
+
+        # NE PAS tester le port avec /dev/tcp : c'est une extension BASH, et ce
+        # script tourne sous sh (dash). Le test echouait toujours, donc les cinq
+        # noeuds etaient signales en panne alors qu'ils allaient bien.
+        # On interroge ssh lui-meme et on lit son message d'erreur : c'est
+        # portable, et ca distingue un refus de connexion d'un probleme de cle.
+        SSHERR=$(timeout 12 ssh -n $SSH_OPTS "$SSH_USER@$ip" true 2>&1) || true
+        case "$SSHERR" in
+          *"Connection refused"*|*"Connection timed out"*|*"No route to host"*)
+            echo "PING MAIS PAS DE SSH"
+            echo "             -> signature d'un /opt/bootlocal.sh non executable."
+            echo "                Le noeud a demarre mais pcp_startup.sh n'a pas tourne."
+            echo "                Verifier sur place (ecran + clavier) :"
+            echo "                    ls -l /opt/bootlocal.sh        # doit avoir les x"
+            echo "                    ls -l /var/log/pcp_boot.log    # absent = confirme"
+            echo "                Remede :"
+            echo "                    sudo chmod +x /opt/bootlocal.sh && filetool.sh -b && sudo reboot"
+            ALERTES=$((ALERTES + 1))
+            continue ;;
+          *"Permission denied"*)
+            echo "SSH repond mais CLE REFUSEE - redeposer la cle publique"
+            ALERTES=$((ALERTES + 1))
+            continue ;;
+        esac
+
+        R=$(timeout 20 ssh -n $SSH_OPTS "$SSH_USER@$ip" '
+            p=""
+            [ -x /opt/bootlocal.sh ]            || p="$p bootlocal-non-executable"
+            [ -f /var/log/pcp_boot.log ]        || p="$p pcp_boot.log-absent"
+            [ -x '"$PCPNA"' ]                   || p="$p pcpna-mode-absent"
+            [ -x /mnt/mmcblk0p2/pcpNetAudio/bin/snapclient ] || p="$p binaire-absent"
+            grep -qF '"'"'$(readlink'"'"' /mnt/mmcblk0p2/pcpNetAudio/bin/startup.sh 2>/dev/null \
+                                                || p="$p startup.sh-pre-evalue"
+            sudo tar tzvf /mnt/mmcblk0p2/tce/mydata.tgz 2>/dev/null \
+                | grep -q "rwx.*opt/bootlocal.sh" || p="$p sauvegarde-sans-bit-x"
+            m=$('"$PCPNA"' status 2>/dev/null || echo "?")
+            u=$(cut -d. -f1 /proc/uptime)
+            if [ -n "$p" ]; then echo "DEFAUTS:$p|$m|$u"; else echo "OK|$m|$u"; fi
+        ' 2>/dev/null)
+
+        if [ -z "$R" ]; then
+            echo "SSH ouvert mais commande sans reponse"
+            ALERTES=$((ALERTES + 1))
+            continue
+        fi
+
+        etat=$(echo "$R" | cut -d"|" -f1)
+        mode=$(echo "$R" | cut -d"|" -f2)
+        up=$(echo "$R"   | cut -d"|" -f3)
+
+        if [ "$etat" = "OK" ]; then
+            printf 'sain        mode=%-9s uptime=%sh\n' "$mode" "$((up / 3600))"
+        else
+            printf 'DEFAUTS     mode=%-9s uptime=%sh\n' "$mode" "$((up / 3600))"
+            echo "$etat" | sed "s/^DEFAUTS://" | tr " " "\n" | grep -v "^$" | sed "s/^/             -> /"
+            ALERTES=$((ALERTES + 1))
+        fi
     done
     exit 0
 fi

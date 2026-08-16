@@ -109,7 +109,8 @@ DRY_RUN=1 SNAPSERVER=192.168.1.27 ./deploy.sh
 SNAPSERVER=192.168.1.27 ./deploy.sh
 
 # exploitation
-./fleet.sh status
+./fleet.sh status            # snapcast | lms par nœud
+./fleet.sh health            # diagnostic, reconnaît les pannes connues
 ./fleet.sh snapcast          # tout le parc vers le flux live
 ./fleet.sh lms               # retour à la bibliothèque
 ./fleet.sh snapcast pcpDJ    # un seul nœud
@@ -117,6 +118,30 @@ SNAPSERVER=192.168.1.27 ./deploy.sh
 ```
 
 Sur un nœud isolé : `pcpna-mode snapcast|lms|status`.
+
+## Diagnostic : `fleet.sh health`
+
+Contrôle chaque nœud et **nomme la panne** au lieu de laisser deviner :
+
+```
+pcpLobby     DEFAUTS     mode=snapcast  uptime=1h
+             -> bootlocal-non-executable
+```
+
+Il reconnaît en particulier la signature **ping OK + SSH fermé**, qui a coûté trois
+réinstallations : `/opt/bootlocal.sh` non exécutable, donc `pcp_startup.sh` jamais
+lancé, donc ni sshd ni serveur web ni squeezelite. Le nœud paraît mort alors qu'il a
+parfaitement démarré. Dans ce cas il affiche directement le remède, qui doit être
+tapé sur place puisque SSH est justement ce qui manque.
+
+Contrôles effectués par nœud : `bootlocal.sh` exécutable, `pcp_boot.log` présent,
+`pcpna-mode` et le binaire en place, `startup.sh` non pré-évalué par le heredoc, et
+**bit d'exécution présent dans `mydata.tgz`** — c'est ce qui sera restauré au
+prochain démarrage, donc ce qui compte vraiment.
+
+`install.sh` fait les mêmes vérifications en fin de déploiement et **refuse de
+rendre la main** si le nœud n'est pas sain, plutôt que de laisser le défaut se
+révéler au reboot suivant.
 
 ## Console web
 
