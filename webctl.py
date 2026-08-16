@@ -42,6 +42,20 @@ FLEET = REPO / "fleet.sh"
 _switch_lock = threading.Lock()
 _last_switch = {"running": False, "result": "", "fin": 0.0}
 
+# Cache court de l'etat, borne cote SERVEUR.
+#
+# Chaque appel a rpc() ouvre une connexion neuve vers snapserver, qui journalise
+# connexion + deconnexion + nettoyage de session : TROIS lignes par sondage. Un
+# navigateur laisse ouvert produisait ainsi ~90 lignes/minute en permanence dans
+# le journal systemd, ecrites sur la carte SD.
+#
+# Le cache rend cette charge independante du nombre d'onglets ouverts et de leur
+# cadence -- y compris une page ancienne restee en cache navigateur. L'etat d'un
+# parc audio ne change pas seul : 3 s de peremption sont sans consequence, et le
+# cache est court-circuite pendant une bascule, ou la fraicheur compte.
+_cache = {"t": 0.0, "v": None}
+_cache_lock = threading.Lock()
+
 
 def rpc(method, params=None):
     """Un aller-retour JSON-RPC avec snapserver.
@@ -88,13 +102,19 @@ def noeuds_connus():
     return noms
 
 
-def etat():
+def etat(frais=False):
     """Photo du parc : clients déclarés, connectés ou non, et mode déduit.
 
     Le mode se déduit des connexions plutôt que d'interroger les nœuds en SSH :
     un nœud rendu à LMS a coupé son snapclient, donc il apparaît déconnecté.
     C'est instantané et gratuit, là où un `fleet.sh status` coûte 2 s.
     """
+    with _cache_lock:
+        if (not frais and _cache["v"] is not None
+                and time.time() - _cache["t"] < 3.0
+                and not _last_switch["running"]):
+            return _cache["v"]
+
     st = rpc("Server.GetStatus")["result"]["server"]
     connus = noeuds_connus()
 
@@ -123,7 +143,7 @@ def etat():
         mode = "partiel"
 
     flux = st["streams"][0] if st["streams"] else {}
-    return {
+    resultat = {
         "mode": mode,
         "clients": clients,
         "flux": flux.get("id", "?"),
@@ -136,6 +156,9 @@ def etat():
         "bascule_resultat": (_last_switch["result"]
                              if time.time() - _last_switch["fin"] < 30 else ""),
     }
+    with _cache_lock:
+        _cache["t"], _cache["v"] = time.time(), resultat
+    return resultat
 
 
 def basculer(mode):
@@ -292,6 +315,7 @@ async function charger(){
   bs.className = 'mode' + (e.mode==='snapcast' ? ' actif-snap' : '');
   bl.className = 'mode' + (e.mode==='lms' ? ' actif-lms' : '');
   bs.disabled = bl.disabled = e.bascule_en_cours;
+  cadence(e.bascule_en_cours);
   document.getElementById('msg').textContent =
     e.bascule_en_cours ? 'bascule en cours…' : (e.bascule_resultat || '');
 
@@ -316,13 +340,32 @@ async function mode(m){
   document.getElementById('b-snap').disabled = true;
   document.getElementById('b-lms').disabled = true;
   document.getElementById('msg').textContent = 'bascule en cours…';
+  cadence(true);
   await fetch('/api/mode', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({mode:m})});
   charger();
 }
 
+// Sondage ADAPTATIF : lent au repos, rapide pendant une bascule.
+//
+// Chaque appel ouvre une connexion JSON-RPC neuve vers snapserver, qui
+// journalise connexion + deconnexion + nettoyage de session. A 2 s, cela
+// faisait 90 lignes/minute dans le journal systemd du serveur en permanence,
+// pour une page que personne ne regarde la plupart du temps. Mesure a
+// l'appui : 57 connexions en 3 minutes.
+//
+// 5 s au repos suffit largement -- l'etat d'un parc audio ne change pas seul.
+// 1 s pendant une bascule, ou l'utilisateur attend un retour immediat.
+let periode = null;
+function cadence(rapide){
+  const v = rapide ? 1000 : 5000;
+  if (periode === v) return;
+  periode = v;
+  if (window._t) clearInterval(window._t);
+  window._t = setInterval(charger, v);
+}
 charger();
-setInterval(charger, 2000);
+cadence(false);
 </script>
 </body>
 </html>
