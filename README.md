@@ -66,7 +66,8 @@ d'un parc de quatre :
 
 | nœud | modèle | arch | RAM | HAT | mixer |
 |---|---|---|---|---|---|
-| pcpDJ | Pi 3 Model B+ | armv7l | 921 Mo | HiFiBerry DAC+ Pro | oui |
+| pcpDJ | Pi 3 Model B+ | armv7l | 921 Mo | HiFiBerry DAC+ | oui |
+| pcpSystem | Pi 3 Model B+ | armv7l | 921 Mo | HiFiBerry DAC+ | oui |
 | pcpBunker | **Pi Zero W** | **armv6l** | 427 Mo | HiFiBerry DAC | non |
 | pcpKitchen | Pi Zero 2 W | armv7l | 426 Mo | HiFiBerry DAC | non |
 | pcpLobby | Pi Zero 2 W | armv7l | 426 Mo | HiFiBerry DAC | non |

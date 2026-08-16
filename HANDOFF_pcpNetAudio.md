@@ -9,7 +9,7 @@ posé : `git push` ne demande plus rien).
 | | |
 |---|---|
 | **Serveur** | `piSnap`, RPi 3B+, Debian Trixie 64 bits, **192.168.1.27** — HAT HiFiBerry DAC+ADC hw v1.2 |
-| **Clients** | 4 nœuds piCorePlayer 11.1.0 — `.22` `.23` `.24` `.26` |
+| **Clients** | 5 nœuds piCorePlayer 11.1.0 — `.22` `.23` `.24` `.25` `.26` |
 | **Transport** | Snapcast **0.35.0** sur Ethernet, codec `pcm` |
 | **LMS existant** | 192.168.1.30 |
 
@@ -161,7 +161,8 @@ antérieures — s'y fier plutôt qu'à la mémoire.**
 
 | nœud | IP | modèle | rev | arch | RAM | HAT | mixer |
 |---|---|---|---|---|---|---|---|
-| `pcpDJ` | .23 | Pi 3 Model B+ | `a020d3` | armv7l | 921 Mo | HiFiBerry **DAC+ Pro** | oui |
+| `pcpDJ` | .23 | Pi 3 Model B+ | `a020d3` | armv7l | 921 Mo | HiFiBerry **DAC+** | oui |
+| `pcpSystem` | .25 | Pi 3 Model B+ | `a020d3` | armv7l | 921 Mo | HiFiBerry **DAC+** | oui |
 | `pcpBunker` | .22 | **Pi Zero W** | `9000c1` | **armv6l** | 427 Mo | HiFiBerry DAC | **non** |
 | `pcpKitchen` | .24 | Pi Zero 2 W | `902120` | armv7l | 426 Mo | HiFiBerry DAC | **non** |
 | `pcpLobby` | .26 | Pi Zero 2 W | `902120` | armv7l | 426 Mo | HiFiBerry DAC | **non** |
@@ -181,8 +182,8 @@ Points qui en découlent :
 - **Trois HAT sur quatre n'ont aucun mixer ALSA.** Sans objet depuis que le
   volume est retiré (`--mixer none`), mais déterminant si le mode `dmix` était un
   jour retenu : l'atténuation logicielle y serait obligatoire.
-- **`bcm2835` n'est encore actif que sur `pcpDJ`** (card 0 « Headphones »). C'est
-  donc le seul nœud où le bug 2 se manifestait, et le bon banc d'essai.
+- **`bcm2835` est actif sur `pcpDJ` et `pcpSystem`** (card 0 « Headphones »), les
+  deux Pi 3B+. Ce sont les seuls nœuds où le bug 2 se manifestait.
 - `CLOSEOUT="5"` est désormais posé sur **les 4 nœuds** (`install.sh` le fait).
 - Les 4 nœuds portent le binaire snapclient 0.35.0 `bookworm` dans
   `/mnt/mmcblk0p2/pcpNetAudio/bin/`.
