@@ -293,15 +293,20 @@ cat > "$BIN_DIR/startup.sh" <<EOF
 # Identification EXACTE par /proc/<pid>/exe, jamais par la ligne de commande.
 # "pkill -f <chemin>" tuerait tout processus dont la cmdline mentionne ce
 # chemin -- y compris un shell de diagnostic. Constate en vrai.
+# Les \$ sont ECHAPPES : ce heredoc n'est pas quote, donc tout \$ nu serait
+# evalue par install.sh a la generation au lieu d'etre ecrit dans le script.
+# Erreur commise ici meme : la boucle s'ecrivait [ "" = "<chemin>" ], donc elle
+# ne tuait jamais rien. Seules les valeurs d'installation ci-dessous
+# (BIN_DIR, LOG, SNAPSERVER...) doivent etre expansees maintenant.
 for p in /proc/[0-9]*; do
-    [ "$(readlink "$p/exe" 2>/dev/null)" = "$BIN_DIR/snapclient" ] \\
-        && kill "${p#/proc/}" 2>/dev/null
+    [ "\$(readlink "\$p/exe" 2>/dev/null)" = "$BIN_DIR/snapclient" ] \\
+        && kill "\${p#/proc/}" 2>/dev/null
 done
 sleep 1
 # Borne le journal : au-dela de 4 Mo on repart d'une base propre plutot que de
 # laisser croitre indefiniment. On garde la fin, qui porte l'incident le plus
 # recent, pas le debut.
-if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 4194304 ]; then
+if [ -f "$LOG" ] && [ "\$(wc -c < "$LOG")" -gt 4194304 ]; then
     tail -c 1048576 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 # Forme URL introduite en snapcast 0.32.0. "--host" et "--port" restent
