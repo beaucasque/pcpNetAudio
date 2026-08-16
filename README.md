@@ -62,7 +62,7 @@ un argument positionnel, `snapclient tcp://<serveur>:1704`.
 ## Parc hétérogène
 
 Les nœuds n'ont **ni le même modèle de Raspberry Pi ni le même HAT audio**. Relevé réel
-d'un parc de quatre :
+d'un parc de cinq :
 
 | nœud | modèle | arch | RAM | HAT | mixer |
 |---|---|---|---|---|---|
@@ -143,6 +143,36 @@ prochain démarrage, donc ce qui compte vraiment.
 rendre la main** si le nœud n'est pas sain, plutôt que de laisser le défaut se
 révéler au reboot suivant.
 
+## Témoin local sur le serveur
+
+snapclient tourne aussi **sur le serveur**, pointé sur `127.0.0.1`, dans
+`/etc/default/snapclient` :
+
+```
+SNAPCLIENT_OPTS="tcp://127.0.0.1:1704 -s hw:CARD=sndrpihifiberry,DEV=0 \
+                 --hostID piSnap-local --player alsa:buffer_time=40,fragments=4 \
+                 --mixer none"
+```
+
+Il sert de témoin : si le parc décroche mais que lui tient, le problème est réseau
+ou côté nœud.
+
+⚠ **Ses options doivent suivre celles du parc.** Configuré avant le réglage des
+tampons, il est resté au défaut ALSA de 80 ms alors que le serveur passait à
+`buffer=80` — soit sous le plancher mesuré. Il a donc sous-alimenté en continu
+pendant des heures :
+
+```
+32 724 lignes de journal en 15 min   ← le témoin
+ 1 353 lignes                        ← snapserver
+```
+
+Le journal systemd ne retenait alors plus que **14 minutes** d'historique, ce qui
+rend tout diagnostic a posteriori impossible — et cette écriture permanente sur
+carte SD est un suspect sérieux pour les `fast forwarding` du serveur, qui jettent
+30 ms d'audio et s'entendent. Toute modification de `buffer_time` côté parc doit
+être répercutée ici.
+
 ## Console web
 
 `webctl.py` sert une page de contrôle sur le port 8080 du serveur, pensée pour le
@@ -159,7 +189,7 @@ dupliquée. Le reste de la page affiche l'état de chaque zone.
 
 Aucun réglage de volume n'est exposé — voir la section suivante.
 
-Après une bascule vers LMS, les quatre nœuds sont de nouveau visibles dans Lyrion
+Après une bascule vers LMS, les nœuds sont de nouveau visibles dans Lyrion
 **en 6 secondes**, connectés et allumés. La lecture ne reprend pas d'elle-même : il
 faut la relancer depuis Lyrion.
 
@@ -168,7 +198,7 @@ faut la relancer depuis Lyrion.
 snapserver lit la carte **directement** :
 
 ```
-source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true&silence_threshold_percent=0.01&idle_threshold=3000
+source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true&silence_threshold_percent=0.1&idle_threshold=3000
 ```
 
 **`send_silence=true` n'est pas optionnel ici.** Par défaut, quand le flux passe en
@@ -229,6 +259,26 @@ sur 150 s en régime permanent.
 Conséquence pour qui mesure : **purger les journaux 30 s après le démarrage**, sinon
 on impute au réglage ce qui n'appartient qu'à la mise en route. C'est ce qui m'a fait
 croire un instant que 80 ms était marginal.
+
+## Mesurer : ce que les compteurs clients ne voient pas
+
+Un **`fast forwarding` du serveur jette ~30 ms d'audio à la source** pour rattraper
+un retard de lecture ALSA. Les clients reçoivent un flux continu, donc **ne
+signalent rien** — mais le trou s'entend sur toutes les zones.
+
+Une métrique qui ne compte que les anomalies clients est donc aveugle au défaut le
+plus audible. C'est l'oreille de l'utilisateur qui l'a signalé, pas la mesure.
+Surveiller les deux :
+
+```sh
+sudo journalctl -u snapserver --no-pager -o cat | grep -c 'fast forwarding'
+```
+
+Autre piège de méthode : **toute bascule vers snapcast produit un transitoire**.
+Mesurer sans écarter la phase de mise en route fait imputer au réglage ce qui
+n'appartient qu'au démarrage — sur une épreuve de 3 minutes, 2 à 3 anomalies par
+nœud toutes groupées dans les 6 premières secondes. Purger les journaux **30 s
+après** le démarrage avant toute mesure de régime permanent.
 
 ## Latence
 
@@ -467,6 +517,11 @@ Trois causes de bugs silencieux, toutes rencontrées en vrai dans ce dépôt :
   tous les nœuds. Ne jamais faire dépendre le fonctionnement de ce qui suit — `fleet.sh`
   appelle donc `pcpna-mode` par son **chemin absolu** sur ext4, et le symlink dans
   `/usr/local/bin` n'est qu'un confort.
+- **`pgrep -f` / `pkill -f` matchent la ligne de commande entière — Y COMPRIS CELLE
+  DE L'APPELANT.** Un `pkill -f mon-script.sh` lancé depuis un shell dont la ligne de
+  commande contient ce nom **tue ce shell**. Vécu deux fois : d'abord sur les nœuds,
+  puis sur le serveur en tuant ma propre session. Identifier par `/proc/<pid>/exe`, ou
+  tuer par PID obtenu séparément.
 - **`pgrep -f` / `pkill -f` sur un chemin matchent la ligne de commande entière** :
   tout processus qui *mentionne* le chemin est compté, y compris un shell de
   diagnostic. Un `status` peut mentir, et un `pkill -f` **tuer un innocent**.

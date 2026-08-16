@@ -1,7 +1,7 @@
 # Handoff — pcpNetAudio
 
 **Destinataire :** agent en SSH sur le Raspberry Pi 3B+ serveur.
-**Dernière mise à jour :** 15 août 2026, session « déploiement du parc ».
+**Dernière mise à jour :** 16 août 2026, session « endurance et optimisation ».
 **Dépôt :** `https://github.com/beaucasque/pcpNetAudio` — à jour, poussé depuis
 `/home/patrice/pcpNetAudio` sur le serveur (`gh` authentifié, credential helper
 posé : `git push` ne demande plus rien).
@@ -51,7 +51,8 @@ est en I2S : seul le réseau utilise l'USB.
 
 ## 2. État réel du serveur — FAIT, ne pas refaire
 
-Tout ce qui suit a été installé et vérifié le 14 août 2026.
+Tout ce qui suit est installé et vérifié. Le parc entier a redémarré avec
+succès et tourne en conditions réelles.
 
 ### Étape A — plateforme
 
@@ -80,7 +81,7 @@ Formats acceptés : **44,1 → 192 kHz, 16/24/32 bits**.
 
 ```
 source = alsa:///?name=live&device=hw:CARD=sndrpihifiberry&send_silence=true\
-         &silence_threshold_percent=0.01&idle_threshold=3000
+         &silence_threshold_percent=0.1&idle_threshold=3000
 default_source = live          # nouveauté 0.35.0
 sampleformat = 48000:16:2
 codec = pcm
@@ -120,21 +121,38 @@ Deux conséquences à ne pas oublier :
 
 Ports : **1704** flux, **1705** contrôle JSON-RPC, **1780** interface web.
 
-### Validation de bout en bout
+### Témoin local sur le serveur
 
-snapclient 0.35.0 est aussi installé **sur le serveur lui-même** (`/etc/default/snapclient`,
-pointé sur `tcp://127.0.0.1:1704`, sortie `hw:CARD=sndrpihifiberry`). La chaîne
-complète ADC → FIFO → snapserver → snapclient → DAC tourne : **0 underrun,
-horloge à 0,002 ms, aucune erreur**. Sert de témoin permanent : si le parc
-décroche mais que ce client local tient, le problème est réseau ou côté nœud.
+snapclient 0.35.0 est aussi installé **sur le serveur lui-même**, dans
+`/etc/default/snapclient` :
+
+```
+SNAPCLIENT_OPTS="tcp://127.0.0.1:1704 -s hw:CARD=sndrpihifiberry,DEV=0 \
+                 --hostID piSnap-local --player alsa:buffer_time=40,fragments=4 \
+                 --mixer none"
+```
+
+Il sert de témoin : si le parc décroche mais que lui tient, le problème est réseau
+ou côté nœud.
+
+⚠ **Ses options doivent suivre celles du parc.** Configuré avant le réglage des
+tampons, il est resté au défaut ALSA de 80 ms alors que le serveur passait à
+`buffer=80` — soit sous le plancher. Il a sous-alimenté en continu pendant des
+heures, produisant **32 724 lignes de journal en 15 minutes** contre 1 353 pour
+snapserver. Le journal systemd ne retenait alors plus que 14 minutes d'historique,
+et cette écriture permanente sur carte SD est un suspect sérieux pour les
+`fast forwarding` du serveur. Toute modification de `buffer_time` côté parc doit
+être répercutée ici.
 
 ### Étape C — SSH
 
-Clé `~/.ssh/id_ed25519` (`pcpna-server`) déposée sur les **4 nœuds**, accès sans
+Clé `~/.ssh/id_ed25519` (`pcpna-server`) déposée sur les **5 nœuds**, accès sans
 mot de passe vérifié. `~/.ssh/config` porte le multiplexage (`ControlMaster`).
-Les 4 empreintes d'hôte correspondent au relevé d'origine — et un cycle
-d'alimentation réel sur `.23` a confirmé qu'elles **ne sont pas régénérées au
-reboot**.
+Les empreintes d'hôte ne sont **pas** régénérées au reboot (elles sont dans
+`.filetool.lst`) — mais elles changent évidemment après une réinstallation. Trois
+nœuds ont été réinstallés : purger l'ancienne entrée avec
+`ssh-keygen -f ~/.ssh/known_hosts -R <ip>` puis vérifier la nouvelle empreinte par
+`ssh-keyscan` **avant** de l'accepter.
 
 ---
 
@@ -164,7 +182,7 @@ actuelle est un argument positionnel : `snapclient tcp://192.168.1.27:1704`.
 
 ## 4. Le parc, relevé réellement
 
-`./fleet.sh inventory`, 14 août 2026. **Ce relevé contredit les suppositions
+`./fleet.sh inventory`. **Ce relevé contredit les suppositions
 antérieures — s'y fier plutôt qu'à la mémoire.**
 
 | nœud | IP | modèle | rev | arch | RAM | HAT | mixer |
@@ -177,7 +195,7 @@ antérieures — s'y fier plutôt qu'à la mémoire.**
 
 Points qui en découlent :
 
-- **Les 4 sont en filaire (`eth0`).** Les trois Zero passent par un adaptateur
+- **Les 5 sont en filaire (`eth0`).** Les trois Zero passent par un adaptateur
   USB. **Aucun nœud n'est en Wi-Fi** : la question ouverte sur la gigue Wi-Fi et
   le relèvement du `buffer` est close, les cibles de latence restent basses.
 - **`pcpBunker` est un Zero W de première génération, pas un Zero 2.** ARMv6
