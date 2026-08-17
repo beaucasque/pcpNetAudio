@@ -40,6 +40,7 @@ et une capture USB y ajouterait de la gigue.
 | `webctl.py` | serveur | console web de bascule (port 8080) |
 | `pcpna-capture.service` | serveur | **superseded** — capture via arecord + FIFO, gardé en repli |
 | `pcpna-web.service` | serveur | unité de la console web |
+| `veille-endurance.sh` | serveur | surveillance longue durée, écrit `endurance.csv` |
 
 ## Version de Snapcast — 0.35.0 des deux côtés
 

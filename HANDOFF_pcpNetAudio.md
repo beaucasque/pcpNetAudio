@@ -6,6 +6,43 @@
 `/home/patrice/pcpNetAudio` sur le serveur (`gh` authentifié, credential helper
 posé : `git push` ne demande plus rien).
 
+> ## ✅ ÉPREUVE D'ENDURANCE — TERMINÉE, résultats acquis
+>
+> **8 h 12 en continu, 5 nœuds, 99 échantillons** (16 août 20:05 → 17 août 04:17,
+> `endurance.csv`). Le son était coupé, ce qui **isole la dérive du contenu**.
+>
+> | | |
+> |---|---|
+> | Anomalies clients | **0 sur les cinq nœuds** |
+> | Déconnexions | **0** |
+> | Resync | **0** |
+>
+> **Le parc est stable.** Aucune dérive lente, aucun nœud qui décroche seul.
+>
+> **La dérive d'horloge est caractérisée**, 11 `fast forwarding` d'une régularité
+> d'horloger :
+>
+> | | |
+> |---|---|
+> | Intervalle moyen | **64,5 min** (58,5 à 72,9) |
+> | Amplitude moyenne | **60,23 ms**, écart-type **0,38 ms** |
+> | Dérive | **7,75 ppm** |
+>
+> Un écart-type de 0,38 ms sur onze mesures signe un phénomène purement mécanique :
+> ni la charge, ni le réseau, ni le contenu — le son était coupé et le rythme n'a
+> pas changé. Le quartz de l'ADC bat 7,75 millionièmes plus vite que l'horloge du Pi.
+>
+> **Conséquence concrète : un trou de 30 ms toutes les ~64 minutes, sur toutes les
+> zones simultanément.** Ni plus, ni moins.
+>
+> **DÉCISION PRISE : on garde le bit-perfect en capture.** Le rééchantillonnage
+> adaptatif (§11 ter) reste documenté mais n'est pas retenu. Ne pas rouvrir sans
+> élément nouveau — typiquement, une gêne réelle à l'écoute en conditions de set.
+>
+> ⚠ Ne plus relancer d'épreuve sans demande explicite. Phases précédentes :
+> `endurance-phase1.csv`, `endurance-phase2-contaminee.csv`, `endurance-phase3.csv`.
+> Le script est versionné : `veille-endurance.sh`.
+
 | | |
 |---|---|
 | **Serveur** | `piSnap`, RPi 3B+, Debian Trixie 64 bits, **192.168.1.27** — HAT HiFiBerry DAC+ADC hw v1.2 |
@@ -538,6 +575,70 @@ décrochage de 30 ms par heure. Le vrai gain de qualité viendra de la table de
 mixage et de sa sortie ligne, qui supprimera l'ampli casque de l'écran — le
 maillon qui fixe aujourd'hui le plancher de bruit à −87 dBFS au lieu des −93
 dont l'ADC est capable.
+
+---
+
+## 11 ter. Correction de dérive : saut brutal ou rééchantillonnage continu
+
+`snapserver` corrige la dérive entre le quartz de l'ADC et l'horloge système en
+laissant le retard s'accumuler jusqu'à ~60 ms, puis en **jetant 30 ms d'un bloc** :
+
+```
+(AlsaStream) Too many frames available, fast forwarding from 2884 frames (60,08 ms) to 1440 frames (30 ms)
+```
+
+C'est une discontinuité, donc un clic audible sur **toutes les zones simultanément**.
+Relevés : 60 ms, 60 ms, puis 170 ms, à ~56 min d'intervalle. Dérive impliquée :
+**8,8 ppm**, valeur banale entre deux quartz bon marché — rien n'est défectueux.
+
+Aucun réglage snapcast n'y touche : la source `alsa://` n'expose que `send_silence`,
+`idle_threshold` et `silence_threshold_percent`, et `snapserver --help` ne propose
+aucune option de rééchantillonnage.
+
+### La solution propre, si on la veut
+
+Le rééchantillonnage asynchrone (ASRC) corrige **en continu** plutôt que par sauts :
+à 8,8 ppm, cela revient à retirer un échantillon toutes les ~113 000, réparti
+uniformément. Inaudible par construction.
+
+Les deux briques sont **déjà installées** sur le serveur :
+
+```
+HiFiBerry capture  (horloge ADC)
+   └─ alsaloop --sync=samplerate      ← ASRC, fourni par alsa-utils
+      └─ snd-aloop playback           ← module noyau présent
+         └─ snd-aloop capture         (horloge système)
+            └─ snapserver alsa://
+```
+
+### Pourquoi ce n'est pas fait
+
+| | actuel | avec ASRC |
+|---|---|---|
+| Échantillons | **intacts** | tous recalculés en continu |
+| Défaut | un trou de 30-170 ms par heure | aucun |
+| Latence | 80 ms | +20 à 50 ms |
+
+Le projet est construit sur le bit-perfect — c'est la raison du mode ALSA `hw`, du
+refus de `dmix`, du `codec=pcm` et du `--mixer none`. L'ASRC recalculerait chaque
+échantillon, exactement ce qu'on a refusé pour le volume.
+
+**Nuance honnête à conserver :** deux horloges indépendantes ne se réconcilient pas
+sans que quelque chose cède. Ce que la chaîne préserve réellement, c'est le *chemin
+de données* — pas de mise à l'échelle, pas de conversion, pas d'encodage. La
+réconciliation d'horloge a lieu de toute façon, côté serveur par ces sauts, et côté
+client par les ajustements permanents de snapclient. Passer à l'ASRC ne romprait pas
+une pureté absolue qui n'existe pas : ça déplacerait la correction d'un saut rare et
+brutal vers un ajustement continu et doux.
+
+### Tranché : non retenu
+
+L'épreuve de 8 h a établi les chiffres — 30 ms toutes les 64,5 min, dérive de
+7,75 ppm — et la décision est prise : **on garde le bit-perfect en capture**.
+
+Ne pas rouvrir sans élément nouveau. Le seul qui compterait serait une gêne
+réelle à l'écoute en conditions de set, que huit heures de mesure ne peuvent pas
+établir à la place d'une oreille.
 
 ---
 
