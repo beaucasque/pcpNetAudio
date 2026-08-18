@@ -112,6 +112,7 @@ SNAPSERVER=192.168.1.27 ./deploy.sh
 # exploitation
 ./fleet.sh status            # snapcast | lms par nœud
 ./fleet.sh health            # diagnostic, reconnaît les pannes connues
+./fleet.sh audit             # compare les nœuds entre eux, signale les écarts
 ./fleet.sh snapcast          # tout le parc vers le flux live
 ./fleet.sh lms               # retour à la bibliothèque
 ./fleet.sh snapcast pcpDJ    # un seul nœud
@@ -143,6 +144,45 @@ prochain démarrage, donc ce qui compte vraiment.
 `install.sh` fait les mêmes vérifications en fin de déploiement et **refuse de
 rendre la main** si le nœud n'est pas sain, plutôt que de laisser le défaut se
 révéler au reboot suivant.
+
+## Comparaison du parc : `fleet.sh audit`
+
+Complémentaire de `health`, qui vérifie chaque nœud **dans l'absolu**. `audit`
+cherche ce qui **diffère entre eux** et marque les lignes d'un `<<<` :
+
+```
+                       pcpDJ     pcpSystem     pcpBunker    pcpKitchen      pcpLobby
+
+  arch                armv7l        armv7l        armv6l        armv7l        armv7l   <<<
+  bootlocal_x     -rwxrwxr-x    -rwxrwxr-x    -rwxrwxr-x    -rwxr-xr-x    -rwxrwxr-x   <<<
+  binaire_md5     80020f818d    80020f818d    80020f818d    80020f818d    80020f818d
+  closeout                 5             5             5             5             5
+```
+
+Indispensable après une réinstallation partielle : **trois nœuds sur cinq ont été
+refaits**, et il fallait s'assurer que les deux autres répondaient aux mêmes
+exigences. Le marquage ne juge pas — c'est au lecteur de décider si l'écart est
+bénin.
+
+### Vérification du 17 août : les cinq nœuds sont conformes
+
+Tout ce qui doit être identique l'est : binaire (même MD5), `pcpna-mode` (même
+MD5), `CLOSEOUT`, carte détectée, clé SSH, symlink, `pcp_boot.log` présent, et
+surtout **le bit d'exécution de `bootlocal.sh`, actif comme dans `mydata.tgz`** —
+le point qui avait coûté trois réinstallations.
+
+Les écarts relevés sont tous explicables et sans effet :
+
+| Écart | Explication |
+|---|---|
+| `arch` / `noyau` armv6 sur pcpBunker | Zero W de première génération |
+| 65 extensions au lieu de 74, 2 lignes de plus dans `.filetool.lst` | Kitchen et Lobby viennent d'une image pCP plus ancienne ; les lignes en trop sont des clés SSH DSA qu'OpenSSH moderne ignore |
+| `bootlocal_x` en 755 sur pcpKitchen au lieu de 775 | trace du `chmod +x` de réparation sur un fichier passé à 644 ; le bit qui compte est présent |
+| Audio interne différent d'un nœud à l'autre | sans conséquence : `nodes.conf` force `sndrpihifiberry` et `startup.sh` adresse **par nom**, jamais par numéro |
+
+Ce dernier point mérite d'être souligné : l'audio interne est actif sur trois nœuds,
+absent sur deux, et en position de carte variable. **C'est précisément ce que le
+choix d'adresser par nom rend indifférent.**
 
 ## Témoin local sur le serveur
 

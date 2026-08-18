@@ -181,6 +181,35 @@ et cette écriture permanente sur carte SD est un suspect sérieux pour les
 `fast forwarding` du serveur. Toute modification de `buffer_time` côté parc doit
 être répercutée ici.
 
+### Conformité du parc — vérifiée le 17 août
+
+`./fleet.sh audit` compare les nœuds entre eux et marque les écarts. **Trois nœuds
+sur cinq ont été réinstallés** (pcpBunker, pcpDJ, et pcpSystem installé par
+l'utilisateur) ; la vérification portait sur les deux autres.
+
+**Tout ce qui doit être identique l'est** : binaire (même MD5), `pcpna-mode` (même
+MD5), `CLOSEOUT="5"`, carte détectée, clé SSH, symlink, `pcp_boot.log` présent, et
+**le bit d'exécution de `bootlocal.sh` — actif ET dans `mydata.tgz`**, ce qui
+garantit qu'un redémarrage ne reproduira pas la panne.
+
+Écarts relevés, tous bénins :
+
+- `armv6l` sur pcpBunker — Zero W de première génération ;
+- 65 extensions au lieu de 74 et 2 lignes de plus dans `.filetool.lst` sur Kitchen
+  et Lobby — image pCP plus ancienne, les lignes en trop étant des clés SSH DSA
+  qu'OpenSSH moderne ignore ;
+- `bootlocal.sh` en 755 au lieu de 775 sur pcpKitchen — trace du `chmod +x` de
+  réparation ; le bit qui compte est présent ;
+- **audio interne actif sur trois nœuds, absent sur deux, en position variable** —
+  sans conséquence, `nodes.conf` force la carte et `startup.sh` l'adresse par nom.
+
+Bascule aller-retour testée sur les trois nœuds non réinstallés : propre.
+
+**Non fait délibérément :** uniformiser l'audio interne demanderait d'éditer
+`config.txt` sur trois nœuds et de les redémarrer, pour un gain nul puisqu'on
+adresse par nom. Uniformiser pour uniformiser ferait courir un risque de reboot
+sans bénéfice.
+
 ### Étape C — SSH
 
 Clé `~/.ssh/id_ed25519` (`pcpna-server`) déposée sur les **5 nœuds**, accès sans

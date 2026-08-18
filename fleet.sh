@@ -7,6 +7,7 @@
 #   ./fleet.sh inventory --conf  # lignes prêtes à coller dans nodes.conf
 #   ./fleet.sh status            # état de chaque nœud (snapcast | lms)
 #   ./fleet.sh health            # diagnostic complet, reconnaît les pannes connues
+#   ./fleet.sh audit             # compare les nœuds entre eux, signale les écarts
 #   ./fleet.sh snapcast          # bascule le parc vers snapclient
 #   ./fleet.sh lms               # rend la carte à squeezelite
 #   ./fleet.sh snapcast pcpDJ    # un nœud nommé
@@ -38,8 +39,8 @@ TARGETS="$*"
 [ -f "$CONF" ] || { echo "ERREUR: $CONF introuvable" >&2; exit 1; }
 
 case "$ACTION" in
-    snapcast|lms|status|log|inventory|health) ;;
-    *) echo "Usage: $0 [inventory|status|health|snapcast|lms|log] [--conf] [nœud...]" >&2
+    snapcast|lms|status|log|inventory|health|audit) ;;
+    *) echo "Usage: $0 [inventory|status|health|audit|snapcast|lms|log] [--conf] [nœud...]" >&2
        exit 1 ;;
 esac
 
@@ -81,6 +82,64 @@ if [ "$ACTION" = "inventory" ]; then
             || echo "  ($name : pas de reponse en 30 s)"
         [ -z "$CONF_FLAG" ] && echo ""
     done
+    exit 0
+fi
+
+# ---------------------------------------------------------------- audit
+#
+# Compare les noeuds entre eux et SIGNALE LES ECARTS. Complementaire de health,
+# qui verifie chaque noeud dans l'absolu : ici on cherche ce qui differe.
+#
+# Utile apres une reinstallation partielle du parc -- trois noeuds l'ont ete --
+# pour s'assurer que ceux qui n'ont pas ete refaits repondent aux memes
+# exigences. Les lignes marquees "<<<" ont au moins deux valeurs differentes ;
+# a chacune de decider si l'ecart est benin.
+
+if [ "$ACTION" = "audit" ]; then
+    TMPA="/tmp/pcpna-audit.$$"
+    nodes > "$TMPA.list"
+    : > "$TMPA.data"
+    while read -r name ip; do
+        timeout 30 ssh -n $SSH_OPTS "$SSH_USER@$ip" '
+B=/mnt/mmcblk0p2/pcpNetAudio/bin
+e() { printf "%s|%s|%s\n" "$1" "$2" "$3"; }
+H=$(hostname)
+e "$H" arch          "$(uname -m)"
+e "$H" noyau         "$(uname -r)"
+e "$H" pcp           "$(sed -n "s/^PCPVERS=\"\(.*\)\"/\1/p" /usr/local/etc/pcp/pcpversion.cfg 2>/dev/null)"
+e "$H" bootlocal_x   "$(ls -l /opt/bootlocal.sh | cut -c1-10)"
+e "$H" mydata_x      "$(sudo tar tzvf /mnt/mmcblk0p2/tce/mydata.tgz 2>/dev/null | grep opt/bootlocal.sh | cut -c1-10)"
+e "$H" pcpstartup    "$(grep -c pcp_startup /opt/bootlocal.sh)"
+e "$H" pcpna_entete  "$(head -3 /opt/bootlocal.sh | grep -c pcpna-mode)"
+e "$H" boot_log      "$([ -f /var/log/pcp_boot.log ] && echo present || echo ABSENT)"
+e "$H" binaire_md5   "$(md5sum $B/snapclient 2>/dev/null | cut -c1-10)"
+e "$H" binaire_ver   "$($B/snapclient --version 2>/dev/null | head -1 | sed "s/snapclient //;s/ .*//")"
+e "$H" variante      "$(cat /mnt/mmcblk0p2/pcpNetAudio/.variant 2>/dev/null)"
+e "$H" pcpnamode_md5 "$(md5sum $B/pcpna-mode 2>/dev/null | cut -c1-10)"
+e "$H" symlink       "$([ -L /usr/local/bin/pcpna-mode ] && echo oui || echo NON)"
+e "$H" closeout      "$(grep ^CLOSEOUT /usr/local/etc/pcp/pcp.cfg | cut -d= -f2 | tr -d \")"
+e "$H" carte         "$(aplay -l 2>/dev/null | grep -c sndrpihifiberry)"
+e "$H" cle_ssh       "$([ -s /home/tc/.ssh/authorized_keys ] && echo oui || echo NON)"
+e "$H" residus_tmp   "$(ls /tmp/install.sh /tmp/probe.sh 2>/dev/null | wc -l)"
+' 2>/dev/null >> "$TMPA.data"
+    done < "$TMPA.list"
+
+    awk -F"|" '
+      { n[$1]=1; k[$2]=1; v[$1"|"$2]=$3; if (!($1 in ord)) { ord[$1]=++no; nom[no]=$1 }
+        if (!($2 in ko)) { ko[$2]=++kn; cle[kn]=$2 } }
+      END {
+        printf "  %-16s", ""
+        for (i=1;i<=no;i++) printf "%14s", nom[i]
+        printf "\n\n"
+        for (j=1;j<=kn;j++) {
+          c=cle[j]; delete u; d=0
+          printf "  %-16s", c
+          for (i=1;i<=no;i++) { val=v[nom[i]"|"c]; printf "%14s", substr(val,1,13); u[val]=1 }
+          for (x in u) d++
+          printf "%s\n", (d>1 ? "   <<<" : "")
+        }
+      }' "$TMPA.data"
+    rm -f "$TMPA.list" "$TMPA.data"
     exit 0
 fi
 
