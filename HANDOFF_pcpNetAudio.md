@@ -200,15 +200,15 @@ garantit qu'un redémarrage ne reproduira pas la panne.
   qu'OpenSSH moderne ignore ;
 - `bootlocal.sh` en 755 au lieu de 775 sur pcpKitchen — trace du `chmod +x` de
   réparation ; le bit qui compte est présent ;
-- **audio interne actif sur trois nœuds, absent sur deux, en position variable** —
-  sans conséquence, `nodes.conf` force la carte et `startup.sh` l'adresse par nom.
+- ~~audio interne actif sur trois nœuds~~ — **corrigé le 18 août**, voir §4.
 
 Bascule aller-retour testée sur les trois nœuds non réinstallés : propre.
 
-**Non fait délibérément :** uniformiser l'audio interne demanderait d'éditer
-`config.txt` sur trois nœuds et de les redémarrer, pour un gain nul puisqu'on
-adresse par nom. Uniformiser pour uniformiser ferait courir un risque de reboot
-sans bénéfice.
+**Fait le 18 août.** J'avais d'abord écarté l'uniformisation de l'audio interne,
+jugeant le risque de reboot supérieur au gain. Le contexte avait changé : les cinq
+nœuds avaient alors redémarré avec succès et `bootlocal.sh` était correct partout,
+donc le risque n'était plus le même. Opéré un nœud à la fois, avec vérification
+complète entre chaque — boots en 26, 34 et 27 s, aucune anomalie.
 
 ### Étape C — SSH
 
@@ -274,8 +274,12 @@ Points qui en découlent :
 - **Trois HAT sur quatre n'ont aucun mixer ALSA.** Sans objet depuis que le
   volume est retiré (`--mixer none`), mais déterminant si le mode `dmix` était un
   jour retenu : l'atténuation logicielle y serait obligatoire.
-- **`bcm2835` est actif sur `pcpDJ` et `pcpSystem`** (card 0 « Headphones »), les
-  deux Pi 3B+. Ce sont les seuls nœuds où le bug 2 se manifestait.
+- **`bcm2835` a été désactivé sur les cinq nœuds** (18 août) : `dtparam=audio=on`
+  commenté dans `config.txt`, sauvegarde `config.txt.bak-pcpna` sur la partition
+  FAT. Les cinq n'exposent plus que la HiFiBerry en `card 0`. Historiquement il
+  était actif sur `pcpDJ`, `pcpSystem` et `pcpKitchen` — ce sont les nœuds où le
+  bug 2 se manifestait. **Ne pas en conclure que la détection de carte n'a plus
+  d'objet** : un nœud neuf arrivera avec l'audio interne actif.
 - `CLOSEOUT="5"` est désormais posé sur **les 4 nœuds** (`install.sh` le fait).
 - Les 4 nœuds portent le binaire snapclient 0.35.0 `bookworm` dans
   `/mnt/mmcblk0p2/pcpNetAudio/bin/`.

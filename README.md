@@ -178,11 +178,18 @@ Les écarts relevés sont tous explicables et sans effet :
 | `arch` / `noyau` armv6 sur pcpBunker | Zero W de première génération |
 | 65 extensions au lieu de 74, 2 lignes de plus dans `.filetool.lst` | Kitchen et Lobby viennent d'une image pCP plus ancienne ; les lignes en trop sont des clés SSH DSA qu'OpenSSH moderne ignore |
 | `bootlocal_x` en 755 sur pcpKitchen au lieu de 775 | trace du `chmod +x` de réparation sur un fichier passé à 644 ; le bit qui compte est présent |
-| Audio interne différent d'un nœud à l'autre | sans conséquence : `nodes.conf` force `sndrpihifiberry` et `startup.sh` adresse **par nom**, jamais par numéro |
+| Audio interne différent d'un nœud à l'autre | **corrigé le 18 août** — `dtparam=audio=on` commenté sur pcpDJ, pcpSystem et pcpKitchen ; les cinq nœuds n'ont plus que la HiFiBerry en `card 0` |
 
-Ce dernier point mérite d'être souligné : l'audio interne est actif sur trois nœuds,
-absent sur deux, et en position de carte variable. **C'est précisément ce que le
-choix d'adresser par nom rend indifférent.**
+Sur ce dernier point, l'audio interne **a depuis été désactivé** sur les trois nœuds
+concernés : `dtparam=audio=on` commenté dans `config.txt` (sauvegarde
+`config.txt.bak-pcpna` sur la partition FAT), puis redémarrage. Les cinq nœuds
+n'exposent plus que la HiFiBerry, en `card 0`.
+
+Ça n'était pas nécessaire au fonctionnement — `startup.sh` adresse la carte **par
+nom**, ce qui rendait la position indifférente — mais ça supprime une ambiguïté et
+uniformise le parc. Le choix d'adresser par nom reste le garde-fou : il a protégé le
+parc quand l'audio interne était actif, et il protègera un futur nœud où il le
+serait.
 
 ## Témoin local sur le serveur
 
